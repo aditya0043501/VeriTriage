@@ -15,8 +15,11 @@ Flow:
 """
 
 import logging
+import os
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 
@@ -166,8 +169,8 @@ class ChatResponse(BaseModel):
 conversations: Dict[str, Dict] = {}
 
 
-@app.get("/")
-def read_root():
+@app.get("/api")
+def api_info():
     return {"message": "VeriTriage API - Clinical Intake Tool", "version": "2.0.0"}
 
 
@@ -478,3 +481,14 @@ async def reset_conversation(conversation_id: str):
 @app.get("/api/conversations")
 async def get_conversations():
     return {"conversations": list(conversations.keys())}
+
+
+# ---- Serve frontend (single deployable unit) ----
+
+@app.get("/", response_class=HTMLResponse)
+async def serve_frontend():
+    """Serve the frontend HTML so the app works as a single deployable unit."""
+    frontend_path = Path(__file__).parent.parent / "frontend" / "index.html"
+    if frontend_path.exists():
+        return HTMLResponse(content=frontend_path.read_text(), media_type="text/html")
+    return HTMLResponse(content="<h1>VeriTriage</h1><p>Frontend not found.</p>", status_code=404)
