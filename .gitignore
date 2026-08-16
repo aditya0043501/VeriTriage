@@ -16,6 +16,11 @@ env/
 .env
 .env.local
 .env.*.local
+benchmark/.env
+
+# Benchmark artifacts (one-time run, not committed)
+benchmark/venv/
+benchmark/benchmark_results.json
 
 # IDE
 .vscode/
