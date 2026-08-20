@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VeriTriage — Pitch</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #0f172a;
+            font-family: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .slide {
+            max-width: 1400px;
+            width: 100%;
+            padding: 60px;
+        }
+
+        /* ---- Header ---- */
+        .title {
+            font-size: 64px;
+            font-weight: 800;
+            color: #ffffff;
+            letter-spacing: -0.02em;
+        }
+        .subtitle {
+            font-size: 28px;
+            font-weight: 300;
+            color: #94a3b8;
+            margin-top: 6px;
+        }
+        .tagline {
+            font-size: 18px;
+            color: #64748b;
+            margin-top: 8px;
+        }
+
+        /* ---- Three columns ---- */
+        .columns {
+            display: flex;
+            gap: 40px;
+            margin-top: 80px;
+        }
+        .col { flex: 1; min-width: 0; }
+
+        .col-header {
+            font-size: 14px;
+            letter-spacing: 0.1em;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 22px;
+        }
+        .col-problem .col-header { color: #ef4444; }
+        .col-invariants .col-header { color: #3b82f6; }
+        .col-result .col-header { color: #059669; }
+
+        .col-body {
+            font-size: 18px;
+            color: #cbd5e1;
+            line-height: 1.7;
+        }
+
+        /* ---- Invariants list ---- */
+        .invariants {
+            list-style: none;
+            color: #ffffff;
+            font-size: 18px;
+            line-height: 2.0;
+        }
+        .invariants li { display: flex; gap: 14px; align-items: baseline; }
+        .invariants .num {
+            color: #3b82f6;
+            font-weight: 700;
+            font-size: 24px;
+            flex-shrink: 0;
+        }
+
+        /* ---- Result stats ---- */
+        .stat-big {
+            font-size: 36px;
+            font-weight: 700;
+            color: #ffffff;
+            margin-top: 28px;
+        }
+        .stat-small {
+            font-size: 14px;
+            color: #94a3b8;
+            margin-top: 4px;
+        }
+        .result-tagline {
+            font-size: 18px;
+            color: #cbd5e1;
+            margin-top: 28px;
+        }
+
+        /* ---- Footer ---- */
+        .footer {
+            margin-top: 80px;
+            font-size: 14px;
+            color: #475569;
+        }
+        .footer .sep { margin: 0 14px; }
+    </style>
+</head>
+<body>
+    <div class="slide">
+        <div class="title">VeriTriage</div>
+        <div class="subtitle">Clinical Reasoning with Structural Safety</div>
+        <div class="tagline">Deterministic NLP for early detection of common conditions</div>
+
+        <div class="columns">
+            <div class="col col-problem">
+                <div class="col-header">The Problem</div>
+                <div class="col-body">
+                    Clinical AI tools hallucinate criteria or leak raw field names to
+                    patients. One negation bug — "No history of stroke" read as
+                    "stroke" — changes treatment plans and puts lives at risk.
+                </div>
+            </div>
+
+            <div class="col col-invariants">
+                <div class="col-header">The Invariants</div>
+                <ol class="invariants">
+                    <li><span class="num">1</span><span>Negation scope terminates at clause boundaries</span></li>
+                    <li><span class="num">2</span><span>Raw field names cannot reach patients (build fails)</span></li>
+                    <li><span class="num">3</span><span>Ambiguous criteria surface as "unresolved," never guessed</span></li>
+                    <li><span class="num">4</span><span>Emergency red-flags trigger immediate escalation</span></li>
+                    <li><span class="num">5</span><span>Every stage produces auditable output before advancing</span></li>
+                </ol>
+            </div>
+
+            <div class="col col-result">
+                <div class="col-header">The Result</div>
+                <div class="col-body">
+                    4 validated clinical pathways — DVT, Strep Throat, AFib Stroke,
+                    Pneumonia — with published probability ranges, patient-facing
+                    explanations, and doctor reports.
+                </div>
+                <div class="stat-big">216 tests passing</div>
+                <div class="stat-small">11 intentional edge-case failures</div>
+                <div class="result-tagline">Zero hallucination. Zero raw field leaks.</div>
+            </div>
+        </div>
+
+        <div class="footer">
+            SDG 3: Good Health &amp; Well-being<span class="sep">|</span>SDG 10: Reduced Inequalities
+        </div>
+    </div>
+</body>
+</html>
