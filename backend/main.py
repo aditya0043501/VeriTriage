@@ -587,4 +587,14 @@ async def serve_frontend():
     frontend_path = Path(__file__).parent.parent / "frontend" / "index.html"
     if frontend_path.exists():
         return HTMLResponse(content=frontend_path.read_text(), media_type="text/html")
+
+
+@app.get("/demo-script.js")
+async def serve_demo_script():
+    """Serve the demo driver. The script itself is inert unless ?demo=1 or
+    window.ENABLE_DEMO is set, so this is safe to serve always."""
+    script_path = Path(__file__).parent.parent / "frontend" / "demo-script.js"
+    if script_path.exists():
+        return HTMLResponse(content=script_path.read_text(), media_type="application/javascript")
+    return HTMLResponse(content="// demo script not found", status_code=404)
     return HTMLResponse(content="<h1>VeriTriage</h1><p>Frontend not found.</p>", status_code=404)
