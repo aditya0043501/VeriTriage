@@ -20,7 +20,7 @@ Clinical-evaluation-only (marked pending, requires in-person assessment):
 Risk stratification (published cutoffs):
 - Score <=0: Low probability (~5% DVT prevalence)
 - Score 1-2: Moderate probability (~17% DVT prevalence)
-- Score >=3: High probability (~17-53% DVT prevalence)
+- Score >=3: High probability (~53% (44-61% CI), Wells 2006 JAMA pooled cohort)
 """
 
 CRITERIA = [
@@ -89,7 +89,7 @@ def calculate_wells_score(**criteria) -> dict:
         what_to_do = "Seek immediate in-person care. No home remedies for this risk level. Do not massage the leg."
         who_to_see = "Emergency room, due to blood clot risk"
         how_soon = "Within the next few hours - go now"
-        full_text = "HIGH PROBABILITY (score >=3): A substantial share of people in this range have a DVT, which can be dangerous if untreated. Immediate evaluation with ultrasound is recommended. This is an estimate based on your reported symptoms, not a diagnosis."
+        full_text = "HIGH PROBABILITY (score >=3): About half of people in this range turn out to have a DVT, which can be dangerous if untreated. Immediate evaluation with ultrasound is recommended. This is an estimate based on your reported symptoms, not a diagnosis."
 
     full_text += " NOTE: This is a PARTIAL score based on what you can report at home. A complete evaluation requires clinician assessment and testing (alternative diagnosis review, D-dimer/ultrasound)."
 

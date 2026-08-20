@@ -34,8 +34,10 @@ from router import (
 )
 from extraction import leg_swelling_extractor, sore_throat_extractor, afib_extractor
 from extraction.extraction_utils import detect_category_switch, get_category_switch_message, is_repeat_question
+from extraction.rule_fallback import detect_out_of_scope_mentions, format_out_of_scope_notes
 from scoring import calculate_wells_score, calculate_centor_score, calculate_chadsvasc_score
 from population_scope import check_population_scope
+from explanations.explanation_builder import build_explanation
 
 app = FastAPI(title="VeriTriage API", version="2.0.0")
 
@@ -192,10 +194,26 @@ def _build_doctor_report(category, conv_state, score_result, patient_context):
     for key, value in current_data.items():
         if key in ("retry_count", "last_asked_field", "last_bot_message",
                      "history_quality_known", "history_provocation_known",
-                     "afib_confirmed"):
+                     "afib_confirmed", "unclear_counts", "unresolved_fields"):
             continue
         if value is not None:
             scoring_variables[key] = value
+
+    # Build the patient-facing explanation layer (additive — does not
+    # modify any field above). Returns None for afib_stroke or if any
+    # template slot is empty. Wells' and Centor only (Stage 7 scope).
+    explanation = build_explanation(category, score_result, scoring_variables)
+
+    # Symptoms the patient raised that this instrument does not screen for.
+    # Verbatim only — no classification, no condition naming.
+    out_of_scope_notes = format_out_of_scope_notes(
+        conv_state.get("out_of_scope_mentions", []), category
+    )
+
+    # Criteria we stopped asking about after repeated "not sure" answers.
+    # Scored as no-contribution, but reported as never established rather
+    # than silently presented as a "no".
+    unresolved_fields = list(current_data.get("unresolved_fields") or [])
 
     return {
         "chief_complaint": chief_complaint,
@@ -214,6 +232,9 @@ def _build_doctor_report(category, conv_state, score_result, patient_context):
             "symptoms and a validated clinical scoring tool. It is not a diagnosis "
             "and has not been clinically verified."
         ),
+        "explanation": explanation,
+        "out_of_scope_notes": out_of_scope_notes,
+        "unresolved_fields": unresolved_fields,
     }
 
 
@@ -232,10 +253,20 @@ async def chat(request: ChatRequest):
             "phase": "routing",
             "score_result": None,
             "patient_context": None,
+            "out_of_scope_mentions": [],
         }
     conv_state = conversations[conversation_id]
 
     conv_state["conversation_history"].append({"role": "user", "content": request.message})
+
+    # Flag symptom-like statements that match no criterion in the active
+    # instrument. Purely a record of the patient's own words — no
+    # classification, no condition naming (see rule_fallback).
+    if conv_state.get("category") in CATEGORY_MODULES:
+        for mention in detect_out_of_scope_mentions(request.message, conv_state["category"]):
+            if mention not in conv_state.setdefault("out_of_scope_mentions", []):
+                conv_state["out_of_scope_mentions"].append(mention)
+                logger.info(f"[main] out-of-scope mention recorded (not classified): '{mention[:80]}'")
 
     def reply(text, category=None, is_complete=False, score_result=None,
               phase=None, patient_context=None, doctor_report=None, chips=None):
@@ -280,6 +311,17 @@ async def chat(request: ChatRequest):
         conv_state["category"] = category
         module = CATEGORY_MODULES[category]
         conv_state["current_data"] = module["data_class"]().model_dump()
+
+        # The opening description is classified before a category exists, so
+        # re-scan everything said so far now that we know which instrument
+        # is active and therefore what counts as out of scope.
+        for turn in conv_state["conversation_history"]:
+            if turn["role"] != "user":
+                continue
+            for mention in detect_out_of_scope_mentions(turn["content"], category):
+                if mention not in conv_state.setdefault("out_of_scope_mentions", []):
+                    conv_state["out_of_scope_mentions"].append(mention)
+                    logger.info(f"[main] out-of-scope mention recorded (not classified): '{mention[:80]}'")
 
         scope_redirect = check_population_scope(request.message)
         if scope_redirect:

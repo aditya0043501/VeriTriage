@@ -44,6 +44,43 @@ def apply_bare_yes_no(current_input: str, current_data, criteria_keys: List[str]
     return True
 
 
+# ---- "Not sure" clarification handling ----
+#
+# When a patient answers "not sure", re-asking the identical sentence is a
+# dead end. Instead we escalate deterministically:
+#   attempt 1 -> re-ask using a static, pre-written rephrasing for that field
+#   attempt 2 -> stop asking, record the field as unresolved, and move on
+# so the patient is never trapped in a repeat loop.
+
+MAX_UNCLEAR_ATTEMPTS = 2
+
+
+def register_unclear_attempt(current_data, field: str) -> int:
+    """Increment and return the number of unclear answers seen for ``field``."""
+    counts = dict(getattr(current_data, "unclear_counts", None) or {})
+    counts[field] = counts.get(field, 0) + 1
+    current_data.unclear_counts = counts
+    return counts[field]
+
+
+def mark_field_unresolved(current_data, field: str) -> None:
+    """Give up on a field after repeated "not sure" answers.
+
+    The field is set to False so scoring can proceed — False contributes no
+    points, which is the conservative direction — and the field name is
+    recorded so the report can state plainly that it was never established
+    rather than implying the patient answered "no".
+    """
+    unresolved = list(getattr(current_data, "unresolved_fields", None) or [])
+    if field not in unresolved:
+        unresolved.append(field)
+    current_data.unresolved_fields = unresolved
+    if getattr(current_data, field, None) is None:
+        setattr(current_data, field, False)
+    logger.info(f"[mark_field_unresolved] field={field} marked unresolved after "
+                f"{MAX_UNCLEAR_ATTEMPTS} unclear answers; scored as no-contribution")
+
+
 def is_repeat_question(candidate: str, conversation_history: List[Dict[str, str]],
                        is_clarifying_reprompt: bool = False) -> bool:
     """

@@ -54,6 +54,62 @@ NEGATORS = {
 
 INVERTED_FIELDS = frozenset({"absence_of_cough"})
 
+# ---- "Ruled out" family (NegEx-derived phrase-aware negation) ----
+#
+# Double-negation forms are checked FIRST: they are more specific and contain
+# the completed forms as substrings ("not ruled out" ⊃ "ruled out"), so the
+# more-specific reading must win (see docs/negation-pattern-diff-proposal.md §3.1).
+
+# "not ruled out" = condition remains possible -> unclear, never a confident False.
+RULED_OUT_POSSIBLE = [
+    "not ruled out", "not been ruled out", "did not rule out",
+]
+
+# Completed negation: the condition was excluded -> False (True for inverted fields).
+RULED_OUT_NEGATED = [
+    "was ruled out", "is ruled out", "has been ruled out",
+    "have been ruled out", "rules out", "ruled out",
+]
+
+# ---- Scope termination (NegEx [CONJ] family, minimal subset) ----
+#
+# A negation trigger's scope does not cross a conjunction like "but" into a
+# later clause. E.g. "I have no cough, but I do have a fever" — the "no"
+# belongs to "cough" and must not suppress the affirmative "fever" clause
+# that follows "but". This is scoped ONLY to "but" for now (see
+# docs/negation-pattern-diff-proposal.md §3.1 / Stage 2c).
+SCOPE_TERMINATORS = ["but"]
+
+
+def _text_after_terminator(text: str, after_pos: int) -> Optional[str]:
+    """Return the text following the first scope terminator that appears at
+    or after ``after_pos`` in ``text``, or None if no terminator is found."""
+    earliest = None
+    for term in SCOPE_TERMINATORS:
+        pos = text.find(term, after_pos)
+        if pos != -1 and (earliest is None or pos < earliest[0]):
+            earliest = (pos, pos + len(term))
+    if earliest is None:
+        return None
+    return text[earliest[1]:]
+
+
+def _no_pattern_scope_ends_before_yes(text: str, neg_pattern: str, field: str) -> bool:
+    """Return True if a scope terminator separates ``neg_pattern`` from a
+    later affirmative (YES_PATTERNS) match for ``field`` — meaning the
+    negation's scope ends before that later clause, so it must not be
+    treated as a negative answer for this field."""
+    m = re.search(rf"\b{re.escape(neg_pattern)}\b", text)
+    if not m:
+        return False
+    after_term = _text_after_terminator(text, m.end())
+    if after_term is None:
+        return False
+    for yp in YES_PATTERNS.get(field, []):
+        if re.search(rf"\b{re.escape(yp)}\b", after_term):
+            return True
+    return False
+
 
 def _is_negated_context(text: str, keyword: str, window: int = 4) -> bool:
     """Return True if a negator appears within ``window`` words before or
@@ -62,6 +118,11 @@ def _is_negated_context(text: str, keyword: str, window: int = 4) -> bool:
     This is the shared negation-scan step used across all fields to catch
     false-positive keyword matches like "temperature was normal" (fever) or
     "never had a TIA" (stroke history).
+
+    Scope termination: a negator BEFORE the keyword does not count if a
+    scope terminator (e.g. "but") falls between the negator and the
+    keyword — the negator's scope ends at the terminator and does not
+    cross into the following clause.
     """
     t = text.lower()
     kw = keyword.lower()
@@ -70,7 +131,15 @@ def _is_negated_context(text: str, keyword: str, window: int = 4) -> bool:
         return False
     before_words = t[:idx].split()
     after_words = t[idx + len(kw):].split()
-    nearby = before_words[-window:] + after_words[:window]
+    before_window = before_words[-window:]
+    # If a scope terminator appears in the before-window, only negators
+    # after the terminator (i.e. in the same clause as the keyword) count.
+    term_cut = 0
+    for i, tok in enumerate(before_window):
+        clean = re.sub(r"[^a-z']", "", tok)
+        if clean in SCOPE_TERMINATORS:
+            term_cut = i + 1
+    nearby = before_window[term_cut:] + after_words[:window]
     for tok in nearby:
         clean = re.sub(r"[^a-z']", "", tok)
         if clean in NEGATORS or clean.endswith("n't"):
@@ -270,6 +339,16 @@ def _resolve_yes_no(field: str, text: str, allow_unclear: bool = True) -> Extrac
     if _is_hedged(t):
         return "unclear"
 
+    # "Ruled out" family — phrase-aware, checked before the single-token
+    # NEGATORS fallback and the NO/YES pattern tables. Double-negation forms
+    # first (more specific; they contain "ruled out" as a substring).
+    for p in RULED_OUT_POSSIBLE:
+        if p in t:
+            return "unclear" if allow_unclear else None
+    for p in RULED_OUT_NEGATED:
+        if p in t:
+            return True if field in INVERTED_FIELDS else False
+
     # Use word-boundary aware matching so "i do" doesn't match inside "doubt"
     # and "no" doesn't match inside "not". Use \b so punctuation (comma,
     # period) doesn't block matching at sentence boundaries.
@@ -285,6 +364,12 @@ def _resolve_yes_no(field: str, text: str, allow_unclear: bool = True) -> Extrac
     # checking — they ARE the negation.
     for pat in NO_PATTERNS.get(field, []):
         if _pattern_match(pat, t):
+            # Scope termination: if "but" separates this NO match from a
+            # later affirmative clause for this field, the negation's scope
+            # ends before that clause — skip this NO match and let the
+            # YES_PATTERNS loop below evaluate the later clause instead.
+            if _no_pattern_scope_ends_before_yes(t, pat, field):
+                continue
             if field in INVERTED_FIELDS and _is_negated_context(t, pat):
                 return True
             return False
@@ -338,6 +423,23 @@ WELLS_QUESTIONS = {
     "calf_swelling_over_3cm": "Is the calf of the swollen leg noticeably bigger than the other side — more than about 3 centimeters?",
     "pitting_edema": "If you press your finger into the swelling on that leg, does it leave a dent that stays for a moment?",
     "collateral_veins": "Have you noticed any new visible surface veins on that leg that weren't there before?",
+}
+
+# Static, pre-written rephrasings used when a patient answers "not sure".
+# Same principle as the explanation templates: fixed human-authored text,
+# never generated. Strategy per field is either (a) add a concrete example,
+# or (b) split a compound question into the single most decisive part —
+# bundling paralysis OR weakness OR cast into one question is a likely
+# reason patients answer "not sure" in the first place.
+WELLS_REPHRASINGS = {
+    "active_cancer": "Let me ask that more simply: in the last 6 months, have you had chemotherapy, radiation, or surgery for cancer?",
+    "paralysis_or_immobilization": "Let me break that into one simpler question: is that leg currently in a cast, brace, or splint — or unable to move normally?",
+    "bedridden_or_surgery": "Let me simplify: in the last 3 months, have you had an operation of any kind, or spent more than 3 days in a row in bed?",
+    "localized_tenderness": "To put it another way: if you press your fingers firmly into the swollen part of your calf or thigh, does it hurt?",
+    "entire_leg_swollen": "Another way to ask: is the swelling only in the calf or ankle, or does it go all the way up to your thigh as well?",
+    "calf_swelling_over_3cm": "Let me make that more concrete: if you look at both calves side by side, does the swollen one look clearly bigger — roughly an inch or more?",
+    "pitting_edema": "To be more specific: press your thumb into the swollen area for about 5 seconds, then lift it off. Does a dent stay behind for a moment?",
+    "collateral_veins": "Another way to put it: looking at the skin of that leg, do you see any veins near the surface that are new — ones you don't remember being there before?",
 }
 
 
@@ -425,6 +527,15 @@ CENTOR_QUESTIONS = {
     "absence_of_cough": "Do you have a cough along with your sore throat?",
     "tender_cervical_nodes": "Are there any tender or swollen lumps at the front of your neck, near the jaw?",
     "tonsillar_exudate": "If you look in the back of your throat, do you see any white patches or swelling on your tonsils?",
+}
+
+# Static, pre-written rephrasings for "not sure" answers (see WELLS_REPHRASINGS).
+CENTOR_REPHRASINGS = {
+    "age": "Just the number is fine — for example, 34.",
+    "fever": "Let me simplify: have you measured your temperature and seen it above 100.4°F (38°C) — or, without measuring, felt hot and shivery?",
+    "absence_of_cough": "Let me ask that more simply: have you been coughing at all over the last day or two?",
+    "tender_cervical_nodes": "To be more specific: press gently along the front of your neck, just under your jawline. Do you feel any lumps there, or is it sore to press?",
+    "tonsillar_exudate": "Another way to ask: with a light and a mirror, look at the back of your throat. Do your tonsils have white or yellow spots on them, or look puffy?",
 }
 
 
@@ -536,6 +647,17 @@ CHADSVASC_QUESTIONS = {
     "diabetes": "Do you have diabetes?",
 }
 
+# Static, pre-written rephrasings for "not sure" answers (see WELLS_REPHRASINGS).
+CHADSVASC_REPHRASINGS = {
+    "age": "Just the number is fine — for example, 68.",
+    "sex": "This score uses sex as one of its factors. Male or female is fine.",
+    "chf_history": "Let me simplify: has a doctor ever told you your heart doesn't pump strongly enough, or put you on medication for heart failure?",
+    "hypertension": "Another way to ask: has a doctor ever told you your blood pressure was high, or started you on blood pressure medication?",
+    "stroke_tia_history": "Let me break that up and ask just the first part: have you ever had a stroke, or a 'mini-stroke' — also called a TIA?",
+    "vascular_disease": "Let me simplify: have you ever had a heart attack, a stent or bypass surgery, or been told you have blocked arteries in your legs?",
+    "diabetes": "Another way to ask: has a doctor ever told you that you have diabetes, or put you on insulin or metformin?",
+}
+
 
 def extract_chadsvasc_fields(combined: str, current_input: str, missing: List[str], last_asked_field: Optional[str] = None) -> Tuple[Dict, List[str]]:
     """Return (extracted_values, unclear_fields)."""
@@ -613,3 +735,145 @@ def extract_chadsvasc_fields(combined: str, current_input: str, missing: List[st
         unclear.append(k)
 
     return out, unclear
+
+
+# ---- Out-of-scope symptom flagging ----
+#
+# When a patient mentions a symptom that matches NO criterion pattern in the
+# active scoring instrument, we must neither silently discard it nor try to
+# work out what it might mean. This detector ONLY answers the question
+# "did the patient say something symptom-shaped that we did not screen for?"
+# It performs no classification, names no condition, and returns the
+# patient's own words verbatim.
+
+# Clause-level qualifying language: a first-person symptom report.
+_OOS_QUALIFIER_PATTERNS = [
+    r"\bi\s+(?:\w+\s+)?(?:have|had|has|get|got|feel|felt|notice|noticed|been|keep|keeps)\b",
+    r"\bi'?ve\s+(?:\w+\s+)?(?:got|had|been|noticed|felt)\b",
+    r"\bi'?m\s+(?:\w+\s+)?(?:feeling|getting|having|noticing)\b",
+    r"\bmy\s+\w+\s+(?:is|are|was|were|feels?|felt|hurts?|aches?|has|have|keeps?)\b",
+    r"\bthere'?s\s+(?:a|some|been)\b",
+]
+
+# Body-related nouns and sensation words. Deliberately broad: a false
+# negative here just means we stay silent, which is the safe direction.
+_OOS_BODY_NOUNS = [
+    "head", "headache", "migraine", "face", "jaw", "tooth", "teeth", "gum",
+    "eye", "eyes", "vision", "ear", "ears", "hearing", "nose", "mouth",
+    "tongue", "chest", "breast", "rib", "stomach", "belly", "abdomen",
+    "abdominal", "gut", "bowel", "stool", "bladder", "urine", "urinating",
+    "kidney", "liver", "back", "spine", "shoulder", "arm", "arms", "elbow",
+    "wrist", "hand", "hands", "finger", "fingers", "hip", "knee", "shin",
+    "foot", "feet", "toe", "toes", "heel", "skin", "rash", "hair", "nail",
+    "muscle", "joint", "joints", "nerve", "bone",
+    "numbness", "numb", "tingling", "pins and needles", "burning",
+    "itching", "itchy", "cramp", "cramping", "spasm", "twitch", "weakness",
+    "dizzy", "dizziness", "lightheaded", "faint", "nausea", "nauseous",
+    "vomiting", "diarrhea", "constipation", "heartburn", "indigestion",
+    "bloating", "fatigue", "tired", "exhausted", "sleep", "insomnia",
+    "appetite", "weight", "sweating", "night sweats", "bruising", "bleeding",
+    "breathing", "breath", "wheeze", "wheezing", "balance", "memory",
+    "anxiety", "mood",
+]
+
+# Category "core" vocabulary: if a clause contains any of these, it is about
+# the thing we ARE assessing, so it must never be flagged as out of scope.
+# This sits on top of the per-criterion pattern tables as a safety net, so
+# in-scope phrasing we simply failed to pattern-match doesn't get flagged.
+_OOS_IN_SCOPE_TERMS = {
+    "leg_swelling": [
+        "leg", "legs", "calf", "calves", "thigh", "swell", "swollen",
+        "swelling", "clot", "dvt", "vein", "veins", "cast", "splint",
+        "cancer", "surgery", "bedridden", "tender", "edema", "dent",
+    ],
+    "sore_throat": [
+        "throat", "swallow", "swallowing", "tonsil", "tonsils", "strep",
+        "hoarse", "voice", "fever", "temperature", "cough", "coughing",
+        "gland", "glands", "lymph", "neck",
+    ],
+    "afib_stroke": [
+        "heart", "afib", "a-fib", "atrial", "fibrillation", "palpitation",
+        "palpitations", "irregular", "pulse", "rhythm", "stroke", "tia",
+        "blood pressure", "hypertension", "diabetes", "diabetic",
+        "blood thinner", "anticoagulant", "clot",
+    ],
+}
+
+_CATEGORY_PATTERN_TABLES = {
+    "leg_swelling": WELLS_PATTERNS,
+    "sore_throat": CENTOR_PATTERNS,
+    "afib_stroke": CHADSVASC_PATTERNS,
+}
+
+# Clause separators only. "also" is deliberately NOT a separator — it is an
+# adverb that commonly sits inside the qualifying phrase ("I also have..."),
+# and splitting on it strips the "I have" that the qualifier patterns need.
+_OOS_CLAUSE_SPLIT = re.compile(r"[.;!?\n]|,| \band\b | \bbut\b ", re.IGNORECASE)
+
+
+def detect_out_of_scope_mentions(text: str, category: str) -> List[str]:
+    """Return clauses that look like a symptom report but match no criterion
+    pattern for the active scoring instrument.
+
+    Returns the patient's own words verbatim. Makes no attempt to classify,
+    name, or interpret what was mentioned — that is explicitly out of scope
+    for this tool and for this function.
+    """
+    pattern_table = _CATEGORY_PATTERN_TABLES.get(category)
+    if pattern_table is None:
+        return []
+
+    all_criterion_patterns = [p for pats in pattern_table.values() for p in pats]
+    in_scope_terms = _OOS_IN_SCOPE_TERMS.get(category, [])
+
+    found: List[str] = []
+    for raw_clause in _OOS_CLAUSE_SPLIT.split(text):
+        if raw_clause is None:
+            continue
+        clause = raw_clause.strip()
+        if not clause or len(clause.split()) < 3:
+            continue
+        low = clause.lower()
+
+        # Skip clauses that are a plain negative ("I don't have any numbness").
+        if detect_yes_no(clause) is False:
+            continue
+        # Skip anything that matches a criterion we DO screen for.
+        if _has_any(low, all_criterion_patterns):
+            continue
+        # Skip anything using the active category's core vocabulary.
+        if any(re.search(rf"\b{re.escape(t)}\b", low) for t in in_scope_terms):
+            continue
+        # Must look like a first-person symptom report...
+        if not any(re.search(p, low) for p in _OOS_QUALIFIER_PATTERNS):
+            continue
+        # ...about a body part or bodily sensation ("s?" so plurals match).
+        if not any(re.search(rf"\b{re.escape(n)}s?\b", low) for n in _OOS_BODY_NOUNS):
+            continue
+
+        if clause not in found:
+            found.append(clause)
+
+    return found
+
+
+def format_out_of_scope_notes(mentions: List[str], category: str) -> Optional[str]:
+    """Build the report section text for out-of-scope mentions.
+
+    Deliberately says only "we did not screen for this". It must never
+    suggest what the symptom could indicate.
+    """
+    if not mentions:
+        return None
+    instrument_names = {
+        "leg_swelling": "DVT",
+        "sore_throat": "strep throat",
+        "afib_stroke": "AFib stroke risk",
+    }
+    name = instrument_names.get(category, "this assessment's")
+    quoted = "; ".join(f'"{m}"' for m in mentions)
+    return (
+        f"Other things you mentioned that we didn't screen for: {quoted}. "
+        f"These aren't part of the {name} criteria this tool checks — "
+        f"worth mentioning to your doctor separately."
+    )

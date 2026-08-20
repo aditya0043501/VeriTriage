@@ -1,0 +1,81 @@
+{
+  "_meta": {
+    "purpose": "Fixed lookup table mapping each Wells' DVT and Modified Centor criterion to a pre-written, human-reviewed plain-language explanation sentence.",
+    "rules": [
+      "Every sentence in this file must be written and reviewed by a human before it is added.",
+      "No sentence may be generated programmatically or by an LLM.",
+      "Empty string = template slot not yet written/reviewed. The explanation layer must treat empty slots as 'no reviewed explanation available' and must NOT fall back to auto-generated text.",
+      "Each criterion has two slots: 'present' (criterion matched, contributed points) and 'absent' (criterion not matched, 0 points)."
+    ],
+    "review_log": [
+      {
+        "batch": "wells_dvt (all 8 criteria, present + absent = 16 sentences)",
+        "status": "approved",
+        "notes": "Human-reviewed and approved. 3 entries revised during review: active_cancer.present (tightened mechanism language), calf_swelling_over_3cm.present (hedged 'recognized sign' to 'can be one of the signs'), entire_leg_swollen.present (removed unsourced 'more strongly associated' comparison — not backed by Wells 2003; both entire-leg and calf-swelling are independent 1-point criteria with no documented hierarchy). Closing clauses varied across all 16 entries to avoid templated repetition.",
+        "criteria_source": "Wells PS, et al. 'Evaluation of D-dimer in the diagnosis of suspected deep-vein thrombosis.' N Engl J Med. 2003;349(13):1227-35."
+      },
+      {
+        "batch": "modified_centor (4 criteria present/absent = 8 sentences + 2 reachable age-modifier brackets = 10 sentences; age_3_to_14 slot removed as unreachable per tool scope adults >=18)",
+        "status": "approved",
+        "notes": "Human-reviewed and approved. 9 of 11 candidates approved as-drafted; age_3_to_14 slot removed entirely rather than written, since tool scope is adults >=18 per centor_score.py docstring and the bracket is never reached in practice. Guard added to _age_modifier_slot() in centor_mockup_demo.py to raise ValueError for age < 18, making the unreachable path fail explicitly rather than silently returning a non-existent key. Closing clauses varied across entries to avoid templated repetition (consistent with Batch 1 approach).",
+        "criteria_source": "Centor RM, et al. Med Decis Making. 1981;1(3):239-46; McIsaac WJ, et al. CMAJ. 1998;158(1):75-83."
+      }
+    ]
+  },
+  "wells_dvt": {
+    "active_cancer": {
+      "present": "You reported currently having cancer or being treated for it within the last 6 months. Cancer and its treatments can affect how the blood clots, which is one reason clot risk rises during active treatment — that's why this is counted here.",
+      "absent": "You did not report active cancer or recent cancer treatment, so this did not add to your score."
+    },
+    "paralysis_or_immobilization": {
+      "present": "You reported a leg that is paralyzed, weak, or has recently been in a cast. When a leg can't move normally, blood flows more slowly through it, raising the chance of a clot forming, which is why this is reflected in your total.",
+      "absent": "You did not report paralysis, weakness, or recent immobilization of the leg, so this didn't contribute any points."
+    },
+    "bedridden_or_surgery": {
+      "present": "You reported being confined to bed for more than 3 days or having major surgery within the last 12 weeks. Both can slow blood flow in the legs, and that's why it's part of your score.",
+      "absent": "You did not report recent prolonged bed rest or major surgery, so this wasn't counted toward your total."
+    },
+    "localized_tenderness": {
+      "present": "You reported tenderness when pressing along the calf or thigh. The deep veins run through these areas, and tenderness there can be a sign of inflammation from a clot, so this is counted toward your total.",
+      "absent": "You did not report tenderness along the deep veins of the calf or thigh, so this didn't add anything to your score."
+    },
+    "entire_leg_swollen": {
+      "present": "You reported that your whole leg is swollen, not just part of it. Whole-leg swelling is one of the signs we check for since it's associated with DVT, so this is included in your score.",
+      "absent": "You did not report that your whole leg is swollen, so this was not included in your score."
+    },
+    "calf_swelling_over_3cm": {
+      "present": "You reported that one calf is more than 3 cm (about an inch) larger around than the other. A measurable difference between the two calves can be one of the signs of a clot on the swollen side, so this adds to your score.",
+      "absent": "You did not report a calf that is more than 3 cm larger than the other, so this didn't factor into your total."
+    },
+    "pitting_edema": {
+      "present": "You reported swelling in the symptomatic leg that leaves an indent when pressed (pitting edema). When this kind of swelling is confined to one leg, it can be a sign of a clot blocking drainage from that leg, which is why this is included here.",
+      "absent": "You did not report one-sided pitting edema, so this didn't count toward your score."
+    },
+    "collateral_veins": {
+      "present": "You reported new surface veins on the leg that were not there before and are not varicose veins. When a deep vein is blocked, blood can be rerouted through these surface veins, so this is reflected in your score.",
+      "absent": "You did not report new non-varicose surface veins on the leg, so this added nothing to your total."
+    }
+  },
+  "modified_centor": {
+    "fever": {
+      "present": "You reported having a fever. A temperature above 100.4°F (38°C) is one of the signs associated with strep throat rather than a viral infection, so this is counted toward your score.",
+      "absent": "You did not report a fever, so this didn't add anything to your total."
+    },
+    "absence_of_cough": {
+      "present": "You reported that you don't have a cough. Strep throat infections typically don't come with a cough, so the absence of one is one of the things we check for — that's why it's reflected in your score.",
+      "absent": "You reported having a cough. Since cough is more typical of viral sore throats than strep, this didn't add to your score."
+    },
+    "tender_cervical_nodes": {
+      "present": "You reported tenderness or swelling when pressing the lymph nodes at the front of your neck, just under the jaw. Swollen, tender nodes there can be a sign that your body is fighting a bacterial infection like strep, which is why this is part of your total.",
+      "absent": "You did not report tender or swollen lymph nodes at the front of your neck, so this wasn't counted toward your score."
+    },
+    "tonsillar_exudate": {
+      "present": "You reported white patches or swelling on your tonsils. These patches, called exudate, can appear with strep throat, so this is included in your score.",
+      "absent": "You did not report white patches or swelling on your tonsils, so this didn't factor into your total."
+    },
+    "age_modifier": {
+      "age_15_to_44": "You reported being between 15 and 44 years old. In this age range, strep throat is common enough that the score doesn't adjust up or down, so your age didn't change your total.",
+      "age_45_plus": "You reported being 45 or older. Strep throat becomes less common at this age, which is why the McIsaac modification subtracts a point here — this lowered your score by 1 point."
+    }
+  }
+}

@@ -658,6 +658,180 @@
             border-radius: 3px;
         }
 
+        /* ---- Patient explanation layer (Stage 7: toggle-gated, Wells'/Centor only) ---- */
+        .explain-toggle {
+            width: 100%;
+            padding: 14px;
+            background: transparent;
+            color: var(--aqua);
+            border: 1px solid var(--aqua);
+            border-radius: 3px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            cursor: pointer;
+            margin-top: 18px;
+            transition: all 180ms ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .explain-toggle:hover {
+            background: rgba(93, 189, 186, 0.08);
+            border-color: #6fcec9;
+            color: #6fcec9;
+        }
+        .explain-toggle:active { transform: translateY(1px); }
+        .explain-toggle .toggle-icon {
+            font-family: var(--font-mono);
+            font-size: 14px;
+            transition: transform 200ms ease;
+        }
+        .explain-toggle.expanded .toggle-icon { transform: rotate(90deg); }
+
+        .explain-layer {
+            display: none;
+            background: var(--slate-surface);
+            border: 1px solid var(--border-strong);
+            border-radius: 4px;
+            padding: 22px;
+            margin-top: 14px;
+        }
+        .explain-layer.visible { display: block; }
+
+        .explain-disclaimer {
+            background: rgba(200, 146, 74, 0.08);
+            border: 1px solid var(--amber);
+            padding: 11px 14px;
+            margin-bottom: 18px;
+            font-size: 12px;
+            line-height: 1.5;
+            color: var(--amber);
+            border-radius: 3px;
+        }
+
+        .explain-score-header {
+            text-align: center;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 18px;
+        }
+        .explain-score-header .score-line {
+            font-family: var(--font-mono);
+            font-size: 15px;
+            color: var(--bone);
+        }
+        .explain-score-header .prob-line {
+            font-family: var(--font-body);
+            font-size: 13px;
+            color: var(--bone-62);
+            margin-top: 8px;
+            line-height: 1.55;
+        }
+        .explain-score-header .citation-line {
+            font-family: var(--font-mono);
+            font-size: 10px;
+            color: var(--bone-62);
+            margin-top: 6px;
+            line-height: 1.45;
+        }
+
+        .explain-criterion {
+            margin-bottom: 22px;
+            padding-bottom: 18px;
+            border-bottom: 1px solid var(--border);
+        }
+        .explain-criterion:last-of-type { border-bottom: none; }
+
+        .explain-criterion-heading {
+            font-family: var(--font-display);
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--bone);
+            margin-bottom: 8px;
+        }
+        .explain-criterion-words {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--aqua);
+            margin-bottom: 6px;
+        }
+        .explain-criterion-sentence {
+            font-family: var(--font-body);
+            font-size: 14px;
+            line-height: 1.65;
+            color: var(--bone);
+            margin-bottom: 12px;
+        }
+
+        /* SVG diagrams from diagram_generator.py have light backgrounds and
+           dark text — wrap in a light container so they render correctly
+           without modifying the deterministic generator output. */
+        .explain-svg-wrapper {
+            background: #f7f9fc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 12px;
+            margin-top: 8px;
+            overflow-x: auto;
+            display: flex;
+            justify-content: center;
+        }
+        .explain-svg-wrapper svg {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .explain-not-contributed {
+            font-size: 13px;
+            color: var(--bone-62);
+            line-height: 1.6;
+            padding: 12px 14px;
+            background: var(--ink-teal);
+            border-radius: 3px;
+            margin-bottom: 14px;
+        }
+        .explain-not-contributed .label {
+            font-family: var(--font-mono);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: var(--aqua);
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .explain-pending {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--crimson);
+            padding: 10px 12px;
+            background: rgba(200, 106, 101, 0.08);
+            border: 1px solid rgba(200, 106, 101, 0.3);
+            border-radius: 3px;
+            margin-bottom: 14px;
+            line-height: 1.5;
+        }
+
+        .explain-citations {
+            font-family: var(--font-mono);
+            font-size: 10px;
+            color: var(--bone-62);
+            line-height: 1.5;
+            padding-top: 14px;
+            border-top: 1px solid var(--border);
+        }
+        .explain-citations .cite-label {
+            color: var(--aqua);
+            display: block;
+            margin-bottom: 2px;
+            margin-top: 8px;
+        }
+        .explain-citations .cite-label:first-child { margin-top: 0; }
+
         /* ---- Clickable citation links ---- */
         .citation-link {
             display: inline-block;
@@ -1202,6 +1376,8 @@
                 <div class="results" id="resultsSection">
                     <div class="panel-label">Result</div>
                     <div class="result-card" id="resultCard"></div>
+                    <div id="explainToggleContainer"></div>
+                    <div id="explainLayerContainer"></div>
                     <div id="explainerSection"></div>
                     <button class="reset-btn" onclick="resetConversation()">Start New Evaluation</button>
                 </div>
@@ -1731,6 +1907,106 @@
                 <button class="reset-btn" onclick="resetConversation()">Start New Evaluation</button>
                 <button class="reset-btn" onclick="window.print()" style="margin-top:8px;">Print / Export Report</button>
             `;
+
+            // Render the "Show me why" toggle if the explanation layer is available
+            renderExplainToggle(report.explanation);
+        }
+
+        // ---- Patient explanation layer (Stage 7: Wells'/Centor only) ----
+        let _cachedExplanation = null;
+
+        function renderExplainToggle(explanation) {
+            const toggleContainer = document.getElementById('explainToggleContainer');
+            const layerContainer = document.getElementById('explainLayerContainer');
+            if (!toggleContainer || !layerContainer) return;
+
+            // Reset state
+            toggleContainer.innerHTML = '';
+            layerContainer.innerHTML = '';
+            layerContainer.classList.remove('visible');
+            _cachedExplanation = null;
+
+            if (!explanation || !explanation.available) {
+                return;
+            }
+
+            _cachedExplanation = explanation;
+
+            const btn = document.createElement('button');
+            btn.className = 'explain-toggle';
+            btn.id = 'explainToggleBtn';
+            btn.innerHTML = '<span class="toggle-icon">&#rsaquo;</span> Show me why';
+            btn.onclick = toggleExplanation;
+            toggleContainer.appendChild(btn);
+        }
+
+        function toggleExplanation() {
+            const btn = document.getElementById('explainToggleBtn');
+            const layer = document.getElementById('explainLayerContainer');
+            if (!btn || !layer || !_cachedExplanation) return;
+
+            if (layer.classList.contains('visible')) {
+                layer.classList.remove('visible');
+                btn.classList.remove('expanded');
+                btn.innerHTML = '<span class="toggle-icon">&#rsaquo;</span> Show me why';
+            } else {
+                layer.innerHTML = buildExplanationHTML(_cachedExplanation);
+                layer.classList.add('visible');
+                btn.classList.add('expanded');
+                btn.innerHTML = '<span class="toggle-icon">&#rsaquo;</span> Hide explanation';
+            }
+        }
+
+        function buildExplanationHTML(expl) {
+            let html = '<div class="explain-layer">';
+
+            // Disclaimer (always visible at top when explanation is shown)
+            html += `<div class="explain-disclaimer"><strong>&#9888;</strong> ${expl.disclaimer}</div>`;
+
+            // Score header with published probability
+            html += '<div class="explain-score-header">';
+            html += `<div class="score-line">Your score: ${expl.score} (${expl.tier} probability tier, ${expl.score_bracket})</div>`;
+            html += `<div class="prob-line"><strong>What this range means (published data):</strong> ${expl.probability_text} of people in this range were found to have this condition.</div>`;
+            html += `<div class="citation-line">Probability estimate source: ${expl.probability_citation}</div>`;
+            html += '</div>';
+
+            // Per-criterion sections with template sentences and inline SVGs
+            for (const crit of expl.criteria) {
+                html += '<div class="explain-criterion">';
+                const headingSuffix = crit.heading_phrase ? ` &mdash; ${crit.heading_phrase}` : (crit.matched ? ` &mdash; +${crit.points} point${crit.points !== 1 ? 's' : ''}` : '');
+                html += `<div class="explain-criterion-heading">${crit.label}${headingSuffix}</div>`;
+                html += `<div class="explain-criterion-words">You told us: &ldquo;${crit.patient_words}&rdquo;</div>`;
+                html += `<div class="explain-criterion-sentence">${crit.explanation}</div>`;
+                html += `<div class="explain-svg-wrapper">${crit.svg}</div>`;
+                html += '</div>';
+            }
+
+            // Criteria that did NOT contribute
+            if (expl.not_contributed && expl.not_contributed.length > 0) {
+                html += '<div class="explain-not-contributed">';
+                html += '<span class="label">What did NOT contribute</span>';
+                html += `These criteria were checked and not matched (0 points each): ${expl.not_contributed.join(', ')}.`;
+                html += '</div>';
+            }
+
+            // Pending clinical evaluation
+            if (expl.pending_fields && expl.pending_fields.length > 0) {
+                html += '<div class="explain-pending">';
+                html += `<strong>PARTIAL SCORE</strong> &mdash; This is a partial score. The following require in-person assessment and are not included: ${expl.pending_fields.join(', ')}.`;
+                html += '</div>';
+            }
+
+            // Citations
+            html += '<div class="explain-citations">';
+            html += `<span class="cite-label">Scoring criteria source:</span>${expl.scoring_citation}`;
+            html += `<span class="cite-label">Probability estimate source:</span>${expl.probability_citation}`;
+            html += '</div>';
+
+            // Disclaimer (repeated at bottom, same as mockups)
+            html += `<div class="explain-disclaimer" style="margin-top:18px;margin-bottom:0;"><strong>&#9888;</strong> ${expl.disclaimer}</div>`;
+
+            html += '</div>';
+            return html;
         }
 
         // ---- How This Works panel ----
@@ -1839,6 +2115,12 @@
             if (dr) dr.remove();
             const ex = document.getElementById('explainerSection');
             if (ex) ex.innerHTML = '';
+            // Reset explanation layer (Stage 7)
+            const et = document.getElementById('explainToggleContainer');
+            if (et) et.innerHTML = '';
+            const el = document.getElementById('explainLayerContainer');
+            if (el) { el.innerHTML = ''; el.classList.remove('visible'); }
+            _cachedExplanation = null;
         }
 
         document.getElementById('userInput').addEventListener('keypress', e => {

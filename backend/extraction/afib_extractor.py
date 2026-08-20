@@ -18,6 +18,7 @@ from extraction.rule_fallback import (
     extract_age as _rf_extract_age,
     extract_chadsvasc_fields,
     CHADSVASC_QUESTIONS,
+    CHADSVASC_REPHRASINGS,
     detect_yes_no,
     _acknowledge_input,
 )
@@ -25,6 +26,9 @@ from extraction.extraction_utils import (
     apply_bare_yes_no,
     is_repeat_question,
     force_advance,
+    register_unclear_attempt,
+    mark_field_unresolved,
+    MAX_UNCLEAR_ATTEMPTS,
 )
 
 logger = logging.getLogger("veritriage")
@@ -47,6 +51,10 @@ class AFibStrokeData(BaseModel):
     diabetes: Optional[bool] = None
     retry_count: int = 0
     last_asked_field: Optional[str] = None
+    # Per-field count of "not sure"-style answers, and fields we stopped
+    # asking about after repeated unclear answers (see extraction_utils).
+    unclear_counts: Dict[str, int] = {}
+    unresolved_fields: List[str] = []
 
     def is_complete(self) -> bool:
         return (
@@ -180,7 +188,23 @@ def extract_and_update_data(
         cue = " Just one more question."
 
     if not previous_answered and previous_field == next_field:
-        response = f"I'm not sure I understood — could you let me know: {base_question} (Yes / No / Not sure)"
+        # Escalate rather than repeating the identical question: rephrase
+        # once, then stop asking and move on. age/sex/afib_confirmed are
+        # required for scoring and have no safe default, so they are never
+        # given up on — they just keep the clearer rephrasing.
+        attempts = register_unclear_attempt(current_data, next_field)
+        if attempts >= MAX_UNCLEAR_ATTEMPTS and next_field in CRITERIA_KEYS:
+            mark_field_unresolved(current_data, next_field)
+            if current_data.is_complete():
+                current_data.last_asked_field = None
+                return ("No problem — we'll leave that one as not established and note it for your doctor. "
+                        "Thank you. I have what I need to assess your stroke risk.", current_data, True)
+            next_field = current_data.get_missing_fields()[0]
+            current_data.last_asked_field = next_field
+            return ("No problem — we'll leave that one as not established and note it for your doctor. "
+                    f"{CHADSVASC_QUESTIONS[next_field]}", current_data, False)
+        rephrased = CHADSVASC_REPHRASINGS.get(next_field, base_question)
+        response = f"No problem — let me put that a different way. {rephrased} (Yes / No / Not sure)"
     else:
         ack = ""
         if not extracted:
