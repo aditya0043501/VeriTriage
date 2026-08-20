@@ -801,7 +801,7 @@ CENTOR_QUESTIONS = {
 
 # Static, pre-written rephrasings for "not sure" answers (see WELLS_REPHRASINGS).
 CENTOR_REPHRASINGS = {
-    "age": "Just the number is fine — for example, 34.",
+    "age": "What is your age? Please enter just the number (for example: 21).",
     "fever": "Let me simplify: have you measured your temperature and seen it above 100.4°F (38°C) — or, without measuring, felt hot and shivery?",
     "absence_of_cough": "Let me ask that more simply: have you been coughing at all over the last day or two?",
     "tender_cervical_nodes": "To be more specific: press gently along the front of your neck, just under your jawline. Do you feel any lumps there, or is it sore to press?",

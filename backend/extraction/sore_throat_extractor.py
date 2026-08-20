@@ -54,11 +54,15 @@ class SoreThroatData(BaseModel):
     source_quotes: Dict[str, str] = {}
 
     def is_complete(self) -> bool:
-        return self.age is not None and all(getattr(self, k) is not None for k in CRITERIA_KEYS)
+        # An unresolved age does not block scoring: Centor's four criteria
+        # stand alone, and the McIsaac modifier is dropped instead (the
+        # report flags age as not established).
+        age_done = self.age is not None or "age" in self.unresolved_fields
+        return age_done and all(getattr(self, k) is not None for k in CRITERIA_KEYS)
 
     def get_missing_fields(self) -> List[str]:
         missing = [k for k in CRITERIA_KEYS if getattr(self, k) is None]
-        if self.age is None:
+        if self.age is None and "age" not in self.unresolved_fields:
             missing.append("age")
         return missing
 
@@ -95,6 +99,13 @@ def extract_and_update_data(
             a = _rf_extract_age(current_input)
             if a is not None:
                 current_data.age = a
+            elif current_data.last_asked_field == "age":
+                # Lax parsing ONLY when age is the pending question, so a
+                # temperature ("38.5") or count elsewhere can't be misread
+                # as an age. Covers "21", "im 21", "i'm 21", "age 21".
+                m = re.search(r"\b(1[0-9]|[2-9][0-9])\b", current_input)
+                if m:
+                    current_data.age = int(m.group(1))
 
     # Build full conversation context
     user_turns = [t["content"] for t in conversation_history if t["role"] == "user"]
@@ -153,6 +164,14 @@ def extract_and_update_data(
     elif previous_field in CRITERIA_KEYS:
         previous_answered = getattr(current_data, previous_field) is not None
 
+    # If age was asked and still hasn't been answered, it stays the pending
+    # question until answered or marked unresolved. Without this, the flow
+    # jumps to the next criterion on a failed age answer and age is never
+    # cleanly re-asked — the loop this fixes.
+    if (previous_field == "age" and current_data.age is None
+            and "age" not in current_data.unresolved_fields):
+        next_field = "age"
+
     current_data.last_asked_field = next_field
 
     # Build response
@@ -165,10 +184,26 @@ def extract_and_update_data(
     # AND the next field is still unclear from their input.
     if not previous_answered and previous_field == next_field:
         # Escalate rather than repeating the identical question: rephrase
-        # once, then stop asking and move on. `age` is required for the
-        # McIsaac modifier and has no safe default, so it is never given up
-        # on — it just keeps the clearer rephrasing.
+        # once, then stop asking and move on.
+        # `age` is numeric, so it can never be defaulted to False like the
+        # boolean criteria — it is recorded as unresolved and the score is
+        # computed without the McIsaac age modifier instead.
         attempts = register_unclear_attempt(current_data, next_field)
+        if attempts >= MAX_UNCLEAR_ATTEMPTS and next_field == "age":
+            unresolved = list(current_data.unresolved_fields)
+            if "age" not in unresolved:
+                unresolved.append("age")
+            current_data.unresolved_fields = unresolved
+            logger.info("[sore_throat_extractor] age unresolved after %d unclear attempts; "
+                        "scoring without the McIsaac age modifier", attempts)
+            if current_data.is_complete():
+                current_data.last_asked_field = None
+                return ("No problem — we'll note that age wasn't provided and continue without it. "
+                        "Thank you. I have what I need to assess your sore throat.", current_data, True)
+            next_field = current_data.get_missing_fields()[0]
+            current_data.last_asked_field = next_field
+            return ("No problem — we'll note that age wasn't provided and continue without it. "
+                    f"{CENTOR_QUESTIONS[next_field]}", current_data, False)
         if attempts >= MAX_UNCLEAR_ATTEMPTS and next_field in CRITERIA_KEYS:
             mark_field_unresolved(current_data, next_field)
             if current_data.is_complete():

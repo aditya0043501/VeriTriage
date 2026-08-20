@@ -72,12 +72,17 @@ def _score_leg_swelling(data):
     )
 
 def _score_sore_throat(data):
+    # If age is unresolved (never provided), score with the neutral 15-44
+    # band — the McIsaac modifier contributes 0 there. The report flags age
+    # as not established via unresolved_fields; the explanation layer
+    # declines to render rather than fabricate an age quote.
+    age = data.age if data.age is not None else 30
     return calculate_centor_score(
         fever=data.fever,
         absence_of_cough=data.absence_of_cough,
         tender_cervical_nodes=data.tender_cervical_nodes,
         tonsillar_exudate=data.tonsillar_exudate,
-        age=data.age
+        age=age
     )
 
 def _score_afib_stroke(data):
