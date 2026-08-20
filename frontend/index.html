@@ -1327,8 +1327,297 @@
         /* Scrollbar — quiet, instrument-like */
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: var(--aqua); }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* ============================================================
+           MEDICAL-PROFESSIONAL RETHEME + LAYOUT FIXES (override block)
+           Values-only pass: palette, spacing, radii, shadows, z-index.
+           Original rules above are unchanged; these win by cascade order.
+           Rollback: delete this block.
+           ============================================================ */
+
+        :root {
+            --ink-teal:      #f8fafc;   /* page background */
+            --slate-surface: #ffffff;   /* cards, conversation column */
+            --slate-raised:  #f1f5f9;   /* recessed wells */
+            --aqua:          #2563eb;   /* primary action */
+            --bone:          #0f172a;   /* headings */
+            --bone-62:       #475569;   /* body text */
+            --bone-38:       #94a3b8;   /* tertiary */
+            --sage:          #059669;   /* success / yes */
+            --amber:         #d97706;   /* warning / not established */
+            --crimson:       #dc2626;   /* danger / emergency */
+            --border:        rgba(15, 23, 42, 0.10);
+            --border-strong: rgba(15, 23, 42, 0.16);
+        }
+
+        html, body { line-height: 1.6; }
+
+        /* ---- Typography ---- */
+        .wordmark, .hiw-science-name, .assessment-card-title,
+        .explainer-heading, .explain-criterion-heading { font-weight: 700; }
+        .composer button, .reset-btn, .explain-toggle, .chip,
+        .assessment-card-cta { font-weight: 500; }
+
+        /* ---- Functional fix 1: chip container never clipped ---- */
+        .conversation-stream { padding: 28px 32px 112px; }  /* chip max-height + 24px */
+        .chip-container {
+            position: relative;
+            z-index: 10;
+            padding: 10px 32px 24px;
+        }
+
+        /* ---- Functional fix 2: explanation layer above everything ---- */
+        #explainLayerContainer {
+            position: relative;
+            z-index: 100;
+        }
+        #explainLayerContainer.visible {
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            border-radius: 12px;
+        }
+
+        /* ---- Functional fix 3: landing cards responsive grid (2x2) ---- */
+        .assessment-options {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+        .assessment-options-label { grid-column: 1 / -1; }
+
+        /* ---- Landing cards ---- */
+        .assessment-card {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-top-width: 3px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+            transition: transform 150ms ease, box-shadow 150ms ease;
+        }
+        .assessment-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(0,0,0,0.12);
+            background: #ffffff;
+        }
+        /* Colored top border per pathway (first grid child is the label row) */
+        .assessment-card:nth-of-type(2) { border-top-color: #2563eb; }  /* Leg Swelling — blue */
+        .assessment-card:nth-of-type(3) { border-top-color: #059669; }  /* Sore Throat — green */
+        .assessment-card:nth-of-type(4) { border-top-color: #7c3aed; }  /* AFib — violet */
+        .assessment-card:nth-of-type(5) { border-top-color: #d97706; }  /* Pneumonia — amber */
+        .assessment-card:hover .assessment-card-cta { transform: none; }
+
+        /* ---- Chat bubbles ---- */
+        .conversation-stream { gap: 8px; }
+        .msg.assistant {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            color: #0f172a;
+        }
+        .msg.user {
+            background: #2563eb;
+            color: #ffffff;
+            border-left: none;
+            border-radius: 12px;
+        }
+        .msg.system { color: #475569; }
+        .typing { color: #2563eb; }
+
+        /* ---- Emergency banner ---- */
+        .msg.emergency {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-left: 4px solid #dc2626;
+            color: #991b1b;
+            font-weight: 700;
+        }
+
+        /* ---- Quick-reply chips ---- */
+        .chip {
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: 9999px;
+            padding: 10px 18px;
+            color: #0f172a;
+        }
+        .chip:hover {
+            background: #f1f5f9;
+            border-color: #94a3b8;
+            color: #0f172a;
+        }
+        .chip:active {
+            background: #2563eb;
+            color: #ffffff;
+            border-color: transparent;
+            transform: none;
+        }
+
+        /* ---- Result card ---- */
+        .result-card {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+        .score-number {
+            width: 88px;
+            height: 88px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background: rgba(37, 99, 235, 0.08);
+            border: 3px solid #2563eb;
+            font-size: 24px;
+            font-weight: 700;
+            color: #2563eb;
+        }
+        .rec-label { font-size: 12px; letter-spacing: 0.05em; color: #64748b; }
+        .tier-low      { background: rgba(5, 150, 105, 0.12); color: #059669; border-color: #059669; }
+        .tier-moderate { background: rgba(217, 119, 6, 0.12); color: #d97706; border-color: #d97706; }
+        .tier-high     { background: rgba(220, 38, 38, 0.10); color: #dc2626; border-color: #dc2626; }
+        .tier-severe   { background: rgba(220, 38, 38, 0.10); color: #dc2626; border-color: #dc2626; }
+        .partial-warning {
+            background: rgba(220, 38, 38, 0.06);
+            border-color: #dc2626;
+            color: #dc2626;
+        }
+        .disclaimer, .explain-disclaimer {
+            background: rgba(217, 119, 6, 0.08);
+            border-color: #d97706;
+            color: #b45309;
+        }
+        .recommendation {
+            background: rgba(37, 99, 235, 0.05);
+            border-left-color: #2563eb;
+            color: #0f172a;
+        }
+        .citation {
+            background: #f8fafc;
+            border-left-color: #2563eb;
+            color: #475569;
+        }
+        .citation-link { color: #2563eb; }
+        .citation-link:hover { color: #1d4ed8; border-bottom-color: #2563eb; }
+
+        /* ---- Explanation layer ---- */
+        .explain-layer {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-left: 4px solid #2563eb;
+            border-radius: 12px;
+            padding: 20px;
+        }
+        .explain-toggle { color: #2563eb; border-color: #2563eb; }
+        .explain-toggle:hover { background: rgba(37, 99, 235, 0.06); color: #1d4ed8; border-color: #1d4ed8; }
+        .explain-citations { font-size: 12px; color: #94a3b8; font-style: italic; }
+        .explain-citations .cite-label { color: #2563eb; font-style: normal; }
+        .explain-score-header .score-line { color: #0f172a; }
+        .explain-score-header .prob-line { color: #475569; }
+        .explain-score-header .citation-line { color: #94a3b8; }
+        .explain-criterion-words { color: #2563eb; }
+        .explain-criterion-sentence { color: #475569; }
+        .explain-not-contributed { background: #f8fafc; color: #475569; }
+        .explain-not-contributed .label { color: #2563eb; }
+        .explain-pending {
+            background: rgba(220, 38, 38, 0.06);
+            border-color: rgba(220, 38, 38, 0.3);
+            color: #dc2626;
+        }
+
+        /* ---- Live Reasoning panel ---- */
+        .reasoning { background: #f8fafc; }
+        .readout-well {
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            box-shadow: none;
+        }
+        .readout-channel { border-bottom: 1px solid #e2e8f0; }
+        .readout-channel.captured .channel-led {
+            background: #2563eb;
+            box-shadow: none;
+        }
+        .channel-value.unresolved { color: #d97706; }
+        .channel-value.unresolved::before {
+            content: "\25CF\00A0";
+            color: #d97706;
+            font-style: normal;
+        }
+        .sub-readout { border-top-color: rgba(15, 23, 42, 0.16); }
+        .sub-readout-total .value { color: #2563eb; }
+        .risk-meter-segment.filled-sage    { background: #059669; }
+        .risk-meter-segment.filled-amber   { background: #d97706; }
+        .risk-meter-segment.filled-crimson { background: #dc2626; }
+
+        /* ---- How This Works ---- */
+        .how-it-works { background: #ffffff; border-color: #e2e8f0; }
+        .hiw-header:hover { background: #f1f5f9; }
+        .hiw-label { color: #2563eb; }
+        .hiw-toggle { color: #2563eb; }
+        .hiw-steps li::before {
+            background: rgba(37, 99, 235, 0.10);
+            border-color: #2563eb;
+            color: #2563eb;
+        }
+        .hiw-disclaimer { color: #b45309; }
+
+        /* ---- Doctor-facing report ---- */
+        .doctor-report {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        .report-sublabel { color: #2563eb; }
+        .report-context-text { background: #f8fafc; border-left-color: #d97706; color: #0f172a; }
+        .report-context-note { color: #b45309; }
+        .report-pending { color: #dc2626; }
+        .report-disclaimer {
+            background: rgba(217, 119, 6, 0.08);
+            border-color: #d97706;
+            color: #b45309;
+        }
+        .report-unresolved { background: rgba(217, 119, 6, 0.06); border-left-color: #d97706; }
+        .report-unresolved li { color: #0f172a; }
+        .report-unresolved li::before { color: #d97706; }
+        .report-out-of-scope { background: #f8fafc; border-left-color: #2563eb; color: #0f172a; }
+
+        /* ---- Post-assessment explainer ---- */
+        .explainer { background: #ffffff; border-color: #e2e8f0; }
+        .explainer-label { color: #475569; }
+        .explainer-diagram { background: #f8fafc; }
+        .explainer-questions { background: #f8fafc; }
+        .explainer-questions li { color: #0f172a; }
+        .explainer-questions li::before { color: #2563eb; }
+        .explainer-tier-tag.low      { background: rgba(5, 150, 105, 0.12); color: #059669; }
+        .explainer-tier-tag.moderate { background: rgba(217, 119, 6, 0.12); color: #d97706; }
+        .explainer-tier-tag.high     { background: rgba(220, 38, 38, 0.10); color: #dc2626; }
+        .explainer-diagram .diagram-label { fill: #475569; }
+        .explainer-diagram .diagram-line { stroke: #2563eb; }
+        .explainer-diagram .diagram-outline { stroke: #94a3b8; }
+        .explainer-diagram .diagram-highlight {
+            stroke: #2563eb;
+            fill: rgba(37, 99, 235, 0.08);
+        }
+
+        /* ---- Demo control bar ---- */
+        #demoBar button { opacity: 0.9; }
+        /* Keep the header tagline clear of the fixed-position demo bar
+           (two pills wide in playing/done mode ≈ 240px) */
+        .app-header .tagline { padding-right: 270px; }
+
+        /* ---- Composer & reset ---- */
+        .composer { background: #ffffff; }
+        .composer input { background: #f8fafc; }
+        .reset-btn { color: #0f172a; }
+        .reset-btn:hover { border-color: #2563eb; color: #2563eb; }
+
+        /* ---- Mobile sheet ---- */
+        .mobile-reasoning-toggle { background: #f1f5f9; border-top-color: #2563eb; color: #2563eb; }
     </style>
 </head>
 <body>
