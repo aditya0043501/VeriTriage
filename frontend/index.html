@@ -2085,7 +2085,9 @@
                 html += '<div class="explain-criterion">';
                 const headingSuffix = crit.heading_phrase ? ` &mdash; ${crit.heading_phrase}` : (crit.matched ? ` &mdash; +${crit.points} point${crit.points !== 1 ? 's' : ''}` : '');
                 html += `<div class="explain-criterion-heading">${crit.label}${headingSuffix}</div>`;
-                html += `<div class="explain-criterion-words">You told us: &ldquo;${crit.patient_words}&rdquo;</div>`;
+                html += crit.patient_words
+                    ? `<div class="explain-criterion-words">You mentioned: &ldquo;${crit.patient_words}&rdquo;</div>`
+                    : `<div class="explain-criterion-words">Based on your description</div>`;
                 html += `<div class="explain-criterion-sentence">${crit.explanation}</div>`;
                 html += `<div class="explain-svg-wrapper">${crit.svg}</div>`;
                 html += '</div>';

@@ -188,6 +188,31 @@ def _is_hedged(text: str) -> bool:
     return False
 
 
+def find_source_quote(
+    user_turns: List[str],
+    current_input: str,
+    field: str,
+    patterns: List[str],
+) -> str:
+    """Find the patient's own words that triggered a positive criterion match.
+
+    Pure sidecar lookup: it runs AFTER extraction has already decided the
+    field is True, and never influences that decision. Priority:
+      1. An explicit yes-style answer to the pending question (current input)
+      2. A keyword hit in the current message
+      3. The earliest earlier user turn containing the match
+      4. Fallback: the current input verbatim
+    """
+    if _resolve_yes_no(field, current_input) is True:
+        return current_input.strip()
+    if _positive_keyword_hit(current_input, patterns):
+        return current_input.strip()
+    for turn in user_turns:
+        if turn is not current_input and _positive_keyword_hit(turn, patterns):
+            return turn.strip()
+    return current_input.strip()
+
+
 # ---- Definition requests ("what does X mean?") ----
 #
 # "I don't know what atrial fibrillation is" is NOT the same as "I don't know

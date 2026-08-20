@@ -214,7 +214,8 @@ def _build_doctor_report(category, conv_state, score_result, patient_context):
     for key, value in current_data.items():
         if key in ("retry_count", "last_asked_field", "last_bot_message",
                      "history_quality_known", "history_provocation_known",
-                     "afib_confirmed", "unclear_counts", "unresolved_fields"):
+                     "afib_confirmed", "unclear_counts", "unresolved_fields",
+                     "source_quotes"):
             continue
         if value is not None:
             scoring_variables[key] = value
@@ -222,7 +223,10 @@ def _build_doctor_report(category, conv_state, score_result, patient_context):
     # Build the patient-facing explanation layer (additive — does not
     # modify any field above). Returns None for afib_stroke or if any
     # template slot is empty. Wells' and Centor only (Stage 7 scope).
-    explanation = build_explanation(category, score_result, scoring_variables)
+    explanation = build_explanation(
+        category, score_result, scoring_variables,
+        source_quotes=current_data.get("source_quotes") or {},
+    )
 
     # Symptoms the patient raised that this instrument does not screen for.
     # Verbatim only — no classification, no condition naming.

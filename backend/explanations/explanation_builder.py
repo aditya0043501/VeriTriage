@@ -31,6 +31,24 @@ from explanations.disclaimer import EXPLANATION_DISCLAIMER
 
 TEMPLATES_PATH = Path(__file__).resolve().parent.parent.parent / "explanations" / "templates.json"
 
+_QUOTE_MAX_LEN = 80
+
+
+def _truncate_quote(quote: str) -> str:
+    """Cap a patient quote at 80 characters, with an ellipsis if longer."""
+    quote = quote.strip()
+    if len(quote) <= _QUOTE_MAX_LEN:
+        return quote
+    return quote[:_QUOTE_MAX_LEN].rstrip() + "..."
+
+
+def _patient_words(param_key: str, source_quotes: Dict[str, str]) -> Optional[str]:
+    """The patient's own words for a matched criterion, or None when no
+    quote was captured (the frontend then shows 'Based on your
+    description' — never a templated placeholder)."""
+    quote = source_quotes.get(param_key)
+    return _truncate_quote(quote) if quote else None
+
 # Wells' criteria: (param_key, breakdown_label, template_key)
 _WELLS_CRITERIA = [
     ("active_cancer", "Active cancer", "active_cancer"),
@@ -88,6 +106,7 @@ def _build_wells_explanation(
     score_result: dict,
     scoring_variables: dict,
     templates: dict,
+    source_quotes: Optional[Dict[str, str]] = None,
 ) -> Optional[dict]:
     """Build the explanation dict for Wells' DVT. Returns None if any
     needed template slot is empty (no placeholders in production)."""
@@ -113,8 +132,9 @@ def _build_wells_explanation(
             return None  # Empty slot — explanation unavailable
 
         if present:
+            quote = _patient_words(param_key, source_quotes or {})
             svg = generate_criterion_diagram(
-                patient_words="(from your conversation)",
+                patient_words=quote or "Based on your description",
                 criterion_label=label,
                 criterion_matched=True,
                 points_contributed=points,
@@ -125,7 +145,7 @@ def _build_wells_explanation(
                 "label": label,
                 "matched": True,
                 "points": points,
-                "patient_words": "(from your conversation)",
+                "patient_words": quote,
                 "explanation": sentence,
                 "svg": svg,
             })
@@ -151,6 +171,7 @@ def _build_centor_explanation(
     score_result: dict,
     scoring_variables: dict,
     templates: dict,
+    source_quotes: Optional[Dict[str, str]] = None,
 ) -> Optional[dict]:
     """Build the explanation dict for Modified Centor. Returns None if any
     needed template slot is empty (no placeholders in production)."""
@@ -181,8 +202,9 @@ def _build_centor_explanation(
             return None
 
         if present:
+            quote = _patient_words(param_key, source_quotes or {})
             svg = generate_criterion_diagram(
-                patient_words="(from your conversation)",
+                patient_words=quote or "Based on your description",
                 criterion_label=label,
                 criterion_matched=True,
                 points_contributed=points,
@@ -193,7 +215,7 @@ def _build_centor_explanation(
                 "label": label,
                 "matched": True,
                 "points": points,
-                "patient_words": "(from your conversation)",
+                "patient_words": quote,
                 "explanation": sentence,
                 "svg": svg,
             })
@@ -252,6 +274,7 @@ def build_explanation(
     category: str,
     score_result: dict,
     scoring_variables: dict,
+    source_quotes: Optional[Dict[str, str]] = None,
 ) -> Optional[dict]:
     """Build the patient-facing explanation layer for a completed assessment.
 
@@ -273,8 +296,8 @@ def build_explanation(
         return None
 
     if category == "leg_swelling":
-        return _build_wells_explanation(score_result, scoring_variables, templates)
+        return _build_wells_explanation(score_result, scoring_variables, templates, source_quotes)
     elif category == "sore_throat":
-        return _build_centor_explanation(score_result, scoring_variables, templates)
+        return _build_centor_explanation(score_result, scoring_variables, templates, source_quotes)
 
     return None

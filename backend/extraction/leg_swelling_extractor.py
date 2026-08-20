@@ -15,6 +15,8 @@ from extraction.rule_fallback import (
     extract_wells_fields,
     WELLS_QUESTIONS,
     WELLS_REPHRASINGS,
+    WELLS_PATTERNS,
+    find_source_quote,
     detect_yes_no,
     detect_definition_request,
     build_definition_reply,
@@ -55,6 +57,10 @@ class LegSwellingData(BaseModel):
     # asking about after repeated unclear answers (see extraction_utils).
     unclear_counts: Dict[str, int] = {}
     unresolved_fields: List[str] = []
+    # The patient's own words that triggered each positively-matched
+    # criterion, for the explanation layer. Pure record-keeping — it never
+    # affects extraction.
+    source_quotes: Dict[str, str] = {}
 
     def is_complete(self) -> bool:
         return all(getattr(self, k) is not None for k in CRITERIA_KEYS)
@@ -113,7 +119,12 @@ def extract_and_update_data(
                 return (f"Got it. {WELLS_QUESTIONS[current_data.last_asked_field]}", current_data, False)
 
     # Apply bare yes/no to the last-asked field
-    apply_bare_yes_no(current_input, current_data, CRITERIA_KEYS)
+    if apply_bare_yes_no(current_input, current_data, CRITERIA_KEYS):
+        # A bare yes/no answer resolved the pending field — quote it verbatim
+        f = current_data.last_asked_field
+        if (f in CRITERIA_KEYS and getattr(current_data, f) is True
+                and f not in current_data.source_quotes):
+            current_data.source_quotes[f] = current_input.strip()
 
     # Run deterministic extraction
     missing = current_data.get_missing_fields()
@@ -122,6 +133,10 @@ def extract_and_update_data(
     for k, v in extracted.items():
         if k in CRITERIA_KEYS and getattr(current_data, k) is None:
             setattr(current_data, k, v)
+            if v is True and k not in current_data.source_quotes:
+                current_data.source_quotes[k] = find_source_quote(
+                    user_turns, current_input, k, WELLS_PATTERNS[k]
+                )
 
     current_data.retry_count = 0
 

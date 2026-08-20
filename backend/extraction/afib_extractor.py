@@ -19,6 +19,8 @@ from extraction.rule_fallback import (
     extract_chadsvasc_fields,
     CHADSVASC_QUESTIONS,
     CHADSVASC_REPHRASINGS,
+    CHADSVASC_PATTERNS,
+    find_source_quote,
     detect_yes_no,
     detect_definition_request,
     build_definition_reply,
@@ -81,6 +83,9 @@ class AFibStrokeData(BaseModel):
     # asking about after repeated unclear answers (see extraction_utils).
     unclear_counts: Dict[str, int] = {}
     unresolved_fields: List[str] = []
+    # The patient's own words that triggered each positively-matched
+    # criterion, for the explanation layer (record-keeping only).
+    source_quotes: Dict[str, str] = {}
 
     def is_complete(self) -> bool:
         return (
@@ -195,7 +200,12 @@ def extract_and_update_data(
     combined = " ".join(user_turns)
 
     # Apply bare yes/no to the last-asked field
-    apply_bare_yes_no(current_input, current_data, CRITERIA_KEYS)
+    if apply_bare_yes_no(current_input, current_data, CRITERIA_KEYS):
+        # A bare yes/no answer resolved the pending field — quote it verbatim
+        f = current_data.last_asked_field
+        if (f in CRITERIA_KEYS and getattr(current_data, f) is True
+                and f not in current_data.source_quotes):
+            current_data.source_quotes[f] = current_input.strip()
 
     # Run deterministic extraction
     missing = current_data.get_missing_fields()
@@ -210,6 +220,10 @@ def extract_and_update_data(
                 current_data.sex = v
         elif k in CRITERIA_KEYS:
             setattr(current_data, k, v)
+            if v is True and k not in current_data.source_quotes:
+                current_data.source_quotes[k] = find_source_quote(
+                    user_turns, current_input, k, CHADSVASC_PATTERNS[k]
+                )
 
     current_data.retry_count = 0
 
