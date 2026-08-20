@@ -80,6 +80,17 @@ def classify_complaint(patient_description: str) -> Category:
     """Deterministic complaint classification based on keyword rules."""
     text = patient_description.lower().strip()
 
+    # Vague/greeting pre-check BEFORE any keyword routing: very short input
+    # with no clinical content (e.g. "hi", "ok", "thanks") goes to the vague
+    # clarifying flow and never reaches category matching. Inputs naming a
+    # specific out-of-scope symptom (e.g. "headache") still route correctly.
+    words = text.split()
+    if len(words) <= 3:
+        has_specific = any(k in text for kws in _SPECIFIC_KEYWORDS.values() for k in kws)
+        has_out_of_scope = any(k in text for k in _OUT_OF_SCOPE_INDICATORS)
+        if not has_specific and not has_out_of_scope:
+            return "vague"  # type: ignore
+
     for category, keywords in _SPECIFIC_KEYWORDS.items():
         if any(k in text for k in keywords):
             return category  # type: ignore

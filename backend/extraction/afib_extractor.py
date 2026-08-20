@@ -24,6 +24,9 @@ from extraction.rule_fallback import (
     detect_yes_no,
     detect_definition_request,
     build_definition_reply,
+    age_in_range,
+    has_out_of_range_age_number,
+    INVALID_AGE_MESSAGE,
     _acknowledge_input,
 )
 from extraction.extraction_utils import (
@@ -137,15 +140,28 @@ def extract_and_update_data(
         if pending:
             return (build_definition_reply(term, pending), current_data, False)
 
-    # Age regex fast-path
+    # Age regex fast-path — bounds-checked: out-of-range numbers are never
+    # stored. Unlike Centor (where age only drives the McIsaac modifier),
+    # age is a SCORED criterion in CHA₂DS₂-VASc, so there is no give-up path
+    # here — an unobtainable age keeps the rephrase, not a fabricated score.
     if current_data.age is None:
         age_match = re.search(r'\b(\d{1,3})\s*(years? old|years?|yrs?|y/o)\b', current_input)
         if age_match:
-            current_data.age = int(age_match.group(1))
+            n = int(age_match.group(1))
+            if age_in_range(n):
+                current_data.age = n
         else:
             a = _rf_extract_age(current_input)
-            if a is not None:
+            if a is not None and age_in_range(a):
                 current_data.age = a
+
+    # Out-of-range age answer while age is pending -> dedicated message.
+    # No give-up: CHA₂DS₂-VASc scores age directly, so proceeding without it
+    # would fabricate points.
+    if (current_data.age is None
+            and current_data.last_asked_field == "age"
+            and has_out_of_range_age_number(current_input)):
+        return (INVALID_AGE_MESSAGE + " " + CHADSVASC_QUESTIONS["age"], current_data, False)
 
     # Sex detection from input
     if current_data.sex is None:

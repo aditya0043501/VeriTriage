@@ -20,6 +20,9 @@ from extraction.rule_fallback import (
     detect_yes_no,
     detect_definition_request,
     build_definition_reply,
+    age_in_range,
+    has_out_of_range_age_number,
+    INVALID_AGE_MESSAGE,
     _acknowledge_input,
 )
 from extraction.extraction_utils import (
@@ -94,10 +97,12 @@ def extract_and_update_data(
     if current_data.age is None:
         age_match = re.search(r'\b(\d{1,3})\s*(years? old|years?|yrs?|y/o)\b', current_input)
         if age_match:
-            current_data.age = int(age_match.group(1))
+            n = int(age_match.group(1))
+            if age_in_range(n):
+                current_data.age = n
         else:
             a = _rf_extract_age(current_input)
-            if a is not None:
+            if a is not None and age_in_range(a):
                 current_data.age = a
             elif current_data.last_asked_field == "age":
                 # Lax parsing ONLY when age is the pending question, so a
@@ -106,6 +111,23 @@ def extract_and_update_data(
                 m = re.search(r"\b(1[0-9]|[2-9][0-9])\b", current_input)
                 if m:
                     current_data.age = int(m.group(1))
+
+    # Out-of-range age answer while age is pending -> dedicated message,
+    # distinct from the generic "couldn't parse" re-ask. Still counts as an
+    # unclear attempt so the unresolved give-up fires after 2 attempts.
+    if (current_data.age is None
+            and current_data.last_asked_field == "age"
+            and has_out_of_range_age_number(current_input)):
+        register_unclear_attempt(current_data, "age")
+        if current_data.unclear_counts.get("age", 0) >= MAX_UNCLEAR_ATTEMPTS:
+            unresolved = list(current_data.unresolved_fields)
+            if "age" not in unresolved:
+                unresolved.append("age")
+            current_data.unresolved_fields = unresolved
+            logger.info("[sore_throat_extractor] age unresolved after out-of-range answers")
+            return ("No problem — we'll note that age wasn't provided and continue without it. "
+                    + _next_criterion_question(current_data), current_data, False)
+        return (INVALID_AGE_MESSAGE + " " + CENTOR_QUESTIONS["age"], current_data, False)
 
     # Build full conversation context
     user_turns = [t["content"] for t in conversation_history if t["role"] == "user"]
@@ -232,6 +254,12 @@ def extract_and_update_data(
         return ("Thank you. I have what I need to assess your sore throat.", current_data, True)
 
     return (response, current_data, False)
+
+
+def _next_criterion_question(current_data) -> str:
+    """Question for the first unanswered criterion, used when age gives up."""
+    missing = current_data.get_missing_fields()
+    return CENTOR_QUESTIONS[missing[0]] if missing else "Thank you. I have what I need to assess your sore throat."
 
 
 def _is_descriptive_input(text: str) -> bool:

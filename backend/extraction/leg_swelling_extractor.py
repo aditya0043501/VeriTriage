@@ -20,6 +20,9 @@ from extraction.rule_fallback import (
     detect_yes_no,
     detect_definition_request,
     build_definition_reply,
+    age_in_range,
+    has_out_of_range_age_number,
+    INVALID_AGE_MESSAGE,
     _acknowledge_input,
 )
 from extraction.extraction_utils import (
@@ -96,10 +99,12 @@ def extract_and_update_data(
     if current_data.age is None:
         age_match = re.search(r'\b(\d{1,3})\s*(years? old|years?|yrs?|y/o)\b', current_input)
         if age_match:
-            current_data.age = int(age_match.group(1))
+            n = int(age_match.group(1))
+            if age_in_range(n):
+                current_data.age = n
         else:
             a = _rf_extract_age(current_input)
-            if a is not None:
+            if a is not None and age_in_range(a):
                 current_data.age = a
 
     # Build full conversation context

@@ -455,15 +455,43 @@ def _acknowledge_input(text: str) -> str:
     return ""
 
 
+MIN_AGE, MAX_AGE = 10, 120
+
+INVALID_AGE_MESSAGE = (
+    "That doesn't look like a valid age. "
+    "Please enter a number between 10 and 120."
+)
+
+
+def age_in_range(n) -> bool:
+    """Sanity bound applied AFTER extraction — the regexes themselves are
+    unchanged. Anything outside 10-120 is treated as failed-to-parse."""
+    return isinstance(n, int) and not isinstance(n, bool) and MIN_AGE <= n <= MAX_AGE
+
+
+def has_out_of_range_age_number(text: str) -> bool:
+    """True if the input contains a number that looks like an intended age
+    answer but falls outside the valid range. Used to distinguish 'answered
+    with an absurd age' (-> invalid-age message) from 'no number at all'
+    (-> normal unclear path)."""
+    for m in re.finditer(r"\b(\d+)\b", text):
+        if not age_in_range(int(m.group(1))):
+            return True
+    return False
+
+
 def extract_age(text: str) -> Optional[int]:
-    """Extract an age number from free text. Returns None if not found."""
+    """Extract an age number from free text. Returns None if not found
+    or outside the valid range (10-120)."""
     m = re.search(r'\b(\d{1,3})\s*(?:years? old|years?|yrs?|y/o)\b', text, re.IGNORECASE)
     if m:
-        return int(m.group(1))
+        n = int(m.group(1))
+        return n if age_in_range(n) else None
     # "I'm 55" or "I am 45" style
     m = re.search(r"\bi\s*(?:'m|am)\s+(\d{1,3})\b", text, re.IGNORECASE)
     if m:
-        return int(m.group(1))
+        n = int(m.group(1))
+        return n if age_in_range(n) else None
     return None
 
 
