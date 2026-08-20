@@ -160,6 +160,19 @@
             border-radius: 3px 3px 3px 0;
         }
 
+        .msg.emergency {
+            align-self: stretch;
+            max-width: 92%;
+            background: rgba(200, 106, 101, 0.14);
+            color: var(--bone);
+            border: 2px solid var(--crimson);
+            border-radius: 3px;
+            font-size: 15px;
+            font-weight: 500;
+            line-height: 1.6;
+            padding: 16px 18px;
+        }
+
         .msg.system {
             align-self: center;
             max-width: 88%;
@@ -1546,10 +1559,18 @@
                     conversationId = data.conversation_id;
                 }
 
-                addMessage(data.response, 'assistant');
-                conversationHistory.push({ role: 'user', content: message });
-                conversationHistory.push({ role: 'assistant', content: data.response });
-                updateUI(data);
+                // Emergency triage gate: render with urgent styling and stop
+                // — no routing, scoring, or chips apply to a halted response.
+                if (data.type === 'emergency') {
+                    addMessage(data.response, 'emergency');
+                    conversationHistory.push({ role: 'user', content: message });
+                    conversationHistory.push({ role: 'assistant', content: data.response });
+                } else {
+                    addMessage(data.response, 'assistant');
+                    conversationHistory.push({ role: 'user', content: message });
+                    conversationHistory.push({ role: 'assistant', content: data.response });
+                    updateUI(data);
+                }
             } catch (error) {
                 console.error('Error:', error);
                 hideTypingIndicator();

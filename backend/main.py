@@ -44,6 +44,7 @@ from extraction.extraction_utils import MAX_UNCLEAR_ATTEMPTS, is_clarifying_resp
 from scoring import calculate_wells_score, calculate_centor_score, calculate_chadsvasc_score
 from population_scope import check_population_scope
 from explanations.explanation_builder import build_explanation
+from emergency_triage import get_emergency_message
 
 app = FastAPI(title="VeriTriage API", version="2.0.0")
 
@@ -183,6 +184,8 @@ class ChatResponse(BaseModel):
     patient_context: Optional[str] = None
     doctor_report: Optional[Dict] = None
     chips: Optional[List[str]] = None
+    type: Optional[str] = None  # "emergency" when the triage gate halts the flow
+    halt: bool = False
 
 
 conversations: Dict[str, Dict] = {}
@@ -260,6 +263,17 @@ def _build_doctor_report(category, conv_state, score_result, patient_context):
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
+    # Emergency triage gate: FIRST line of processing. Before routing,
+    # extraction, scoring, and any conversation-state mutation. A trigger
+    # halts everything and returns the fixed emergency message.
+    emergency_msg = get_emergency_message(request.message)
+    if emergency_msg:
+        return ChatResponse(
+            response=emergency_msg,
+            type="emergency",
+            halt=True,
+        )
+
     conversation_id = request.conversation_id or f"conv_{len(conversations) + 1}"
 
     if conversation_id not in conversations:
