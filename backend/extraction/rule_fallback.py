@@ -525,6 +525,10 @@ YES_PATTERNS = {
     "stroke_tia_history": ["yes", "yeah", "yep", "yup", "i have", "i had", "stroke", "tia", "mini-stroke"],
     "vascular_disease": ["yes", "yeah", "yep", "yup", "i have", "i had", "heart attack", "mi", "pad", "stent", "bypass"],
     "diabetes": ["yes", "yeah", "yep", "yup", "i have", "i am", "diabetic", "diabetes", "type 1", "type 2", "sugar runs high"],
+    "confusion": ["yes", "yeah", "yep", "yup", "i have", "i am", "i feel", "confused", "disoriented", "out of it", "not making sense", "muddled"],
+    "urea_elevated": ["yes", "yeah", "yep", "yup", "i have", "it was high", "high urea", "high bun", "urea was high", "bun was high", "above normal"],
+    "rr_high": ["yes", "yeah", "yep", "yup", "i am", "breathing fast", "fast breathing", "breathing quickly", "panting", "gasping", "short of breath", "breathless"],
+    "bp_low": ["yes", "yeah", "yep", "yup", "it was low", "it is low", "low blood pressure", "bp was low", "bp is low", "measured low"],
 }
 
 NO_PATTERNS = {
@@ -545,6 +549,10 @@ NO_PATTERNS = {
     "stroke_tia_history": ["no", "nope", "not really", "i don't", "i do not", "no stroke", "no tia", "never had a stroke"],
     "vascular_disease": ["no", "nope", "not really", "i don't", "i do not", "no heart attack", "no pad", "no vascular", "arteries are clear"],
     "diabetes": ["no", "nope", "not really", "i don't", "i do not", "no diabetes", "not diabetic", "sugar normal"],
+    "confusion": ["no", "nope", "not really", "i don't", "i do not", "no confusion", "not confused", "clear-headed", "thinking clearly", "same as usual"],
+    "urea_elevated": ["no", "nope", "not really", "i don't", "i do not", "no blood test", "haven't had blood", "not tested", "was normal", "levels were normal"],
+    "rr_high": ["no", "nope", "not really", "i don't", "i do not", "breathing fine", "breathing normally", "normal breathing", "not breathless"],
+    "bp_low": ["no", "nope", "not really", "i don't", "i do not", "bp is fine", "blood pressure is fine", "was normal", "not low", "no low"],
 }
 
 
@@ -967,6 +975,163 @@ CHADSVASC_FIELD_LABELS = {
 }
 
 
+# ---- Pneumonia / CURB-65 ----
+#
+# Urea and blood pressure are measurements rather than things every patient
+# knows. Patients who answer "no" or "not sure" to them are scored as
+# not-elevated per the pathway spec — the report flags the tests as pending
+# so the score reads as a floor, not a ceiling.
+
+CURB65_PATTERNS: Dict[str, List[str]] = {
+    "confusion": ["confused", "disoriented", "disorientated", "not making sense", "out of it", "muddled", "delirious"],
+    "urea_elevated": ["urea", "bun", "blood urea", "high urea", "high bun", "kidney levels"],
+    "rr_high": ["breathing fast", "breathing quickly", "breaths per minute", "breaths a minute", "short of breath", "shortness of breath", "breathless", "panting", "gasping", "breathing hard"],
+    "bp_low": ["low blood pressure", "blood pressure was low", "blood pressure is low", "bp was low", "bp is low", "systolic", "diastolic", "pressure dropped"],
+    "age_65_plus": ["65 or older", "over 65", "over sixty-five", "i'm 6", "i'm 7", "i'm 8", "i'm 9", "i am 6", "i am 7", "i am 8", "i am 9"],
+}
+
+CURB65_QUESTIONS = {
+    "confusion": "Have you felt confused or disoriented recently, more than usual?",
+    "urea_elevated": "Have you had a blood test showing high urea or BUN levels?",
+    "rr_high": "Are you breathing faster than 30 breaths per minute, or feeling short of breath?",
+    "bp_low": "Has your blood pressure been measured as low recently — systolic under 90 or diastolic under 60?",
+    "age_65_plus": "Are you 65 years old or older?",
+}
+
+# Static, pre-written rephrasings for "not sure" answers (see WELLS_REPHRASINGS).
+CURB65_REPHRASINGS = {
+    "confusion": "Let me put that more simply: over the last day or two, have you had trouble thinking clearly, knowing where you are, or answering simple questions — more than is normal for you?",
+    "urea_elevated": "Another way to ask: when you last had blood taken, did anyone mention your urea or kidney levels were high? If you haven't had blood tests recently, just say no.",
+    "rr_high": "To be more concrete: sit quietly for a moment and count how many breaths you take in 30 seconds. More than 15 in half a minute means yes — otherwise no.",
+    "bp_low": "Let me simplify: if your blood pressure was checked recently, did the person checking it say it was low? If it hasn't been checked, just say no.",
+    "age_65_plus": "Just a yes or no is fine: are you aged 65 or older?",
+}
+
+# Escalation-only answer options (see WELLS_OPTIONS).
+CURB65_OPTIONS = {
+    "confusion": ["Yes, more confused than usual", "No, thinking clearly", "Not sure"],
+    "urea_elevated": ["Yes, blood test showed high levels", "No, or haven't been tested", "Not sure"],
+    "rr_high": ["Yes, breathing fast or short of breath", "No, breathing is normal", "Not sure"],
+    "bp_low": ["Yes, it was measured low", "No, or it hasn't been checked", "Not sure"],
+    "age_65_plus": ["Yes, I'm 65 or older", "No, I'm under 65", "Not sure"],
+}
+
+# Human-readable display names (see WELLS_FIELD_LABELS).
+CURB65_FIELD_LABELS = {
+    "confusion": "New confusion or disorientation",
+    "urea_elevated": "High urea or BUN on blood test",
+    "rr_high": "Fast breathing — more than 30 breaths per minute",
+    "bp_low": "Low blood pressure",
+    "age_65_plus": "Age 65 or older",
+}
+
+
+def _extract_rr_number(text: str) -> Optional[bool]:
+    """Parse an explicit breaths-per-minute count ("about 35 per minute").
+    >=30 -> True, <30 -> False, no number -> None."""
+    m = re.search(r"(\d{2,3})\s*(?:per minute|a minute|/min|bpm|breaths)", text.lower())
+    if not m:
+        return None
+    return int(m.group(1)) >= 30
+
+
+def _extract_age_65_plus(text: str) -> Optional[bool]:
+    """Parse an explicit age ("I'm 70", or a bare "70") into the >=65 boolean.
+    None if absent."""
+    a = extract_age(text)
+    if a is None:
+        m = re.fullmatch(r"\s*(\d{1,3})\s*", text)
+        if m:
+            a = int(m.group(1))
+    if a is None:
+        return None
+    return a >= 65
+
+
+def extract_curb65_fields(combined: str, current_input: str, missing: List[str], last_asked_field: Optional[str] = None) -> Tuple[Dict, List[str]]:
+    """Return (extracted_values, unclear_fields) for CURB-65."""
+    out: Dict = {}
+    unclear: List[str] = []
+    cur_lower = current_input.lower()
+    cur_yn = detect_yes_no(current_input)
+    cur_is_no = cur_yn is False
+    cur_short = len(cur_lower.split()) <= 6
+
+    for k in missing:
+        # Numeric/structured fields first.
+        if k == "age_65_plus":
+            # Current input first ("70" or "I'm 70" answering the question),
+            # then any age mentioned earlier in the conversation.
+            a = _extract_age_65_plus(current_input)
+            if a is None:
+                a = _extract_age_65_plus(combined)
+            if a is not None:
+                out["age_65_plus"] = a
+                continue
+            if last_asked_field == k:
+                resolved = _resolve_yes_no(k, current_input)
+                if resolved is True:
+                    out[k] = True
+                    continue
+                elif resolved is False:
+                    out[k] = False
+                    continue
+                if _is_hedged(current_input):
+                    unclear.append(k)
+                    continue
+            unclear.append(k)
+            continue
+
+        if k == "rr_high":
+            rr = _extract_rr_number(current_input) or _extract_rr_number(combined)
+            if rr is not None:
+                out["rr_high"] = rr
+                continue
+
+        # Last-asked field: explicit yes/no patterns take precedence, then
+        # descriptive keyword matches (so negated descriptions don't become True).
+        if last_asked_field == k:
+            pats_temp = CURB65_PATTERNS[k]
+            resolved = _resolve_yes_no(k, current_input)
+            if resolved is True:
+                out[k] = True
+                continue
+            elif resolved is False:
+                out[k] = False
+                continue
+            # Hedged input must never resolve to a confident True.
+            if _is_hedged(current_input):
+                unclear.append(k)
+                continue
+            # Descriptive keyword match — but only if not negated.
+            if _positive_keyword_hit(current_input, pats_temp):
+                out[k] = True
+                continue
+            unclear.append(k)
+            continue
+
+        pats = CURB65_PATTERNS[k]
+        cur_hit = _has_any(current_input, pats)
+        combined_hit = _has_any(combined, pats)
+
+        # Descriptive keyword match -> True (negation-aware).
+        # Guard: only fire when current input is relevant to this field (cur_hit)
+        # or is a bare yes/no answer (cur_yn is not None) — prevents greedy false
+        # positives from keywords in earlier turns.
+        if _positive_keyword_hit(combined, pats) and not cur_is_no:
+            if cur_hit or (cur_short and cur_yn is not None):
+                out[k] = True
+                continue
+
+        # No signal
+        if cur_short and cur_yn is not None and not cur_hit:
+            unclear.append(k)
+            continue
+        unclear.append(k)
+
+    return out, unclear
+
+
 def extract_chadsvasc_fields(combined: str, current_input: str, missing: List[str], last_asked_field: Optional[str] = None) -> Tuple[Dict, List[str]]:
     """Return (extracted_values, unclear_fields)."""
     out: Dict = {}
@@ -1105,12 +1270,18 @@ _OOS_IN_SCOPE_TERMS = {
         "blood pressure", "hypertension", "diabetes", "diabetic",
         "blood thinner", "anticoagulant", "clot",
     ],
+    "pneumonia": [
+        "cough", "coughing", "fever", "feverish", "pneumonia", "chest infection",
+        "lung", "lungs", "phlegm", "sputum", "breath", "breathing", "breathless",
+        "chest", "mucus", "wheeze", "chills",
+    ],
 }
 
 _CATEGORY_PATTERN_TABLES = {
     "leg_swelling": WELLS_PATTERNS,
     "sore_throat": CENTOR_PATTERNS,
     "afib_stroke": CHADSVASC_PATTERNS,
+    "pneumonia": CURB65_PATTERNS,
 }
 
 # Clause separators only. "also" is deliberately NOT a separator — it is an
@@ -1169,12 +1340,14 @@ _CATEGORY_FIELD_LABELS = {
     "leg_swelling": WELLS_FIELD_LABELS,
     "sore_throat": CENTOR_FIELD_LABELS,
     "afib_stroke": CHADSVASC_FIELD_LABELS,
+    "pneumonia": CURB65_FIELD_LABELS,
 }
 
 _CATEGORY_OPTIONS = {
     "leg_swelling": WELLS_OPTIONS,
     "sore_throat": CENTOR_OPTIONS,
     "afib_stroke": CHADSVASC_OPTIONS,
+    "pneumonia": CURB65_OPTIONS,
 }
 
 

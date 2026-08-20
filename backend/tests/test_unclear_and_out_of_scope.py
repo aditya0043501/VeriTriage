@@ -32,6 +32,8 @@ from extraction.rule_fallback import (  # noqa: E402
     WELLS_FIELD_LABELS,
     CENTOR_FIELD_LABELS,
     CHADSVASC_FIELD_LABELS,
+    CURB65_QUESTIONS,
+    CURB65_FIELD_LABELS,
     detect_out_of_scope_mentions,
     format_out_of_scope_notes,
     format_unresolved_fields,
@@ -221,6 +223,9 @@ class TestFieldLabelTablesAreComplete(unittest.TestCase):
 
     def test_chadsvasc(self):
         self._check(CHADSVASC_QUESTIONS, CHADSVASC_FIELD_LABELS, "chadsvasc")
+
+    def test_curb65(self):
+        self._check(CURB65_QUESTIONS, CURB65_FIELD_LABELS, "curb65")
 
 
 # ---------------------------------------------------------------------------

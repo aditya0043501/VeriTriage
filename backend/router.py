@@ -17,7 +17,7 @@ declare scope limitations.
 import re
 from typing import Literal
 
-Category = Literal["leg_swelling", "sore_throat", "afib_stroke", "out_of_scope", "vague"]
+Category = Literal["leg_swelling", "sore_throat", "afib_stroke", "pneumonia", "out_of_scope", "vague"]
 
 
 # ---- Vagueness detection (keyword fallback) ----
@@ -33,7 +33,13 @@ _VAGUE_PHRASES = [
     "i don't know", "not sure what's wrong", "can't explain",
 ]
 
+# Dict order is match precedence (first hit wins). Pneumonia is checked
+# first because substring matching is used: "phlegm" contains "leg", and
+# without this order "lots of phlegm" would misroute to leg_swelling.
+# No pneumonia keyword overlaps any other category's keyword list.
 _SPECIFIC_KEYWORDS = {
+    "pneumonia": ["pneumonia", "chest infection", "lung infection", "pneumococcal", "respiratory infection",
+                  "cough", "fever", "short of breath", "phlegm", "green sputum", "sputum"],
     "leg_swelling": ["leg", "calf", "dvt", "clot", "thigh", "ankle", "shin", "swollen leg", "leg swollen", "leg pain", "leg swelling"],
     "sore_throat": ["throat", "swallow", "tonsil", "pharyng", "larynx", "sore throat"],
     "afib_stroke": ["afib", "atrial fibrillation", "atrial fib", "irregular heartbeat", "irregular heart", "palpitation", "cha2ds2", "chadsvasc", "stroke risk", "blood thinner", "anticoagulation", "a-fib", "a fib"],
@@ -93,7 +99,8 @@ def classify_complaint(patient_description: str) -> Category:
 def get_out_of_scope_message() -> str:
     return (
         "This tool currently supports evaluation of leg swelling (blood clot risk), "
-        "sore throat (strep risk), and stroke risk for atrial fibrillation patients. "
+        "sore throat (strep risk), cough and fever (pneumonia risk), and stroke risk "
+        "for atrial fibrillation patients. "
         "For other symptoms, please consult a healthcare provider directly."
     )
 
@@ -122,7 +129,8 @@ def get_vague_escalation_message() -> str:
     return (
         "I want to help, but I'm having trouble understanding what symptoms "
         "you're experiencing. This tool currently supports evaluation of leg "
-        "swelling, sore throat, and stroke risk for atrial fibrillation patients. "
+        "swelling, sore throat, cough and fever (pneumonia risk), and stroke risk "
+        "for atrial fibrillation patients. "
         "If your symptoms relate to one of these, please describe them and we "
         "can begin. For other concerns, please consult a healthcare provider directly."
     )

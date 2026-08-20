@@ -596,6 +596,8 @@
         .tier-low      { background: rgba(123, 168, 136, 0.14); color: var(--sage);    border: 1px solid var(--sage); }
         .tier-moderate { background: rgba(200, 146, 74, 0.14);  color: var(--amber);   border: 1px solid var(--amber); }
         .tier-high     { background: rgba(200, 106, 101, 0.14); color: var(--crimson); border: 1px solid var(--crimson); }
+        /* CURB-65 names its top tier "severe" — same visual weight as high */
+        .tier-severe   { background: rgba(200, 106, 101, 0.14); color: var(--crimson); border: 1px solid var(--crimson); }
 
         .breakdown-section { margin-bottom: 18px; }
 
@@ -1341,7 +1343,7 @@
             <section class="conversation">
                 <div class="conversation-stream" id="chatMessages">
                     <div class="msg system">
-                        VeriTriage evaluates leg swelling, sore throat, and stroke risk for atrial fibrillation patients using validated clinical scoring systems. This tool is designed for non-pregnant adults without significant immunocompromise. If you are pregnant, under 18, or immunocompromised, please consult a healthcare provider directly. Choose an assessment below, or describe your symptoms in your own words.
+                        VeriTriage evaluates leg swelling, sore throat, cough and fever (pneumonia risk), and stroke risk for atrial fibrillation patients using validated clinical scoring systems. This tool is designed for non-pregnant adults without significant immunocompromise. If you are pregnant, under 18, or immunocompromised, please consult a healthcare provider directly. Choose an assessment below, or describe your symptoms in your own words.
                     </div>
                     <div class="assessment-options">
                         <div class="assessment-options-label">Choose an Assessment</div>
@@ -1358,6 +1360,11 @@
                         <div class="assessment-card" onclick="startAssessment('I have atrial fibrillation and want to check my stroke risk')">
                             <div class="assessment-card-title">AFib Stroke Risk</div>
                             <div class="assessment-card-desc">Estimate stroke risk in atrial fibrillation using the CHA&#8322;DS&#8322;-VASc Score.</div>
+                            <div class="assessment-card-cta">Begin &rsaquo;</div>
+                        </div>
+                        <div class="assessment-card" onclick="startAssessment('I have a bad cough and fever')">
+                            <div class="assessment-card-title">Cough &amp; Fever</div>
+                            <div class="assessment-card-desc">Check pneumonia risk using the CURB-65 Score.</div>
                             <div class="assessment-card-cta">Begin &rsaquo;</div>
                         </div>
                     </div>
@@ -1491,13 +1498,21 @@
                 stroke_tia_history:   { label: 'Prior Stroke/TIA', format: v => v ? 'Yes' : 'No' },
                 vascular_disease:     { label: 'Vascular Disease', format: v => v ? 'Yes' : 'No' },
                 diabetes:             { label: 'Diabetes',         format: v => v ? 'Yes' : 'No' }
+            },
+            pneumonia: {
+                confusion:            { label: 'Confusion',        format: v => v ? 'Yes' : 'No' },
+                urea_elevated:        { label: 'High Urea / BUN',  format: v => v ? 'Yes' : 'No' },
+                rr_high:              { label: 'Fast Breathing',   format: v => v ? 'Yes' : 'No' },
+                bp_low:               { label: 'Low Blood Pressure', format: v => v ? 'Yes' : 'No' },
+                age_65_plus:          { label: 'Age 65+',          format: v => v ? 'Yes' : 'No' }
             }
         };
 
         const SCORE_NAMES = {
             leg_swelling: "Wells' Score",
             sore_throat: 'Centor / McIsaac Score',
-            afib_stroke: 'CHA\u2082DS\u2082-VASc Score'
+            afib_stroke: 'CHA\u2082DS\u2082-VASc Score',
+            pneumonia: 'CURB-65 Score'
         };
 
         const SCIENCE_INFO = {
@@ -1525,6 +1540,14 @@
                 citation_doi: 'https://doi.org/10.1378/chest.09-1584',
                 note: 'Validated for estimating annual thromboembolic/stroke risk in non-valvular atrial fibrillation patients.',
                 context: 'Stroke risk in atrial fibrillation can vary widely depending on other health factors &mdash; which is why doctors use structured questions like these to help estimate it.'
+            },
+            pneumonia: {
+                name: 'CURB-65 Score',
+                citation: 'Lim WS, van der Eerden MM, Laing R, et al. "Defining community acquired pneumonia severity on presentation to hospital: an international derivation and validation study." Thorax. 2003;58(5):377-382.',
+                citation_url: 'https://pubmed.ncbi.nlm.nih.gov/12728155/',
+                citation_doi: 'https://doi.org/10.1136/thorax.58.5.377',
+                note: 'Validated for estimating severity and 30-day mortality risk in community-acquired pneumonia.',
+                context: 'A cough with fever can range from a simple viral illness to pneumonia &mdash; which is why doctors use structured questions like these to help estimate severity.'
             }
         };
 
@@ -1782,11 +1805,32 @@
             if (hasAny) showBreakdown(html, score, ' pts', '', 9);
         }
 
+        function renderCurb65PartialBreakdown(d) {
+            const crit = [
+                ['confusion', 'New confusion'],
+                ['urea_elevated', 'High urea / BUN'],
+                ['rr_high', 'Fast breathing'],
+                ['bp_low', 'Low blood pressure'],
+                ['age_65_plus', 'Age 65+'],
+            ];
+            let html = '';
+            let score = 0;
+            let n = 0;
+            for (const [k, label] of crit) {
+                if (d[k] != null) {
+                    n++;
+                    if (d[k]) { score += 1; html += row(label, '+1'); }
+                    else      { html += row(label, '0'); }
+                }
+            }
+            showBreakdown(html, score, ' pts', `${n}/5 criteria assessed`, 5, { lowMax: 1, modMax: 2 });
+        }
+
         function row(label, value) {
             return `<div class="sub-readout-row"><span class="label">${label}</span><span class="value">${value}</span></div>`;
         }
 
-        function showBreakdown(html, score, unit, note, maxScore) {
+        function showBreakdown(html, score, unit, note, maxScore, tierBounds) {
             const el = document.getElementById('liveBreakdown');
             const content = document.getElementById('breakdownContent');
             if (!html) { el.style.display = 'none'; return; }
@@ -1800,18 +1844,20 @@
                 ${note ? `<div class="sub-readout-note">${note}</div>` : ''}
             `;
             // Render the visual risk meter (segmented bar, tier-colored fill)
-            if (maxScore) renderRiskMeter(score, maxScore);
+            if (maxScore) renderRiskMeter(score, maxScore, tierBounds);
         }
 
-        function renderRiskMeter(score, maxScore) {
+        function renderRiskMeter(score, maxScore, tierBounds) {
             const meter = document.getElementById('riskMeter');
             if (!meter) return;
             // Determine tier boundaries per the scoring systems:
             // Wells: 0 low, 1-2 moderate, 3+ high (max ~8)
             // Centor: 0-1 low, 2-3 moderate, 4+ high (max ~5 with age adj)
             // CHA₂DS₂-VASc: 0 low, 1 moderate, 2+ high (max 9)
+            // CURB-65: 0-1 low, 2 moderate, 3-5 severe (max 5)
             let lowMax, modMax;
-            if (maxScore === 8) { lowMax = 0; modMax = 2; }       // Wells
+            if (tierBounds) { lowMax = tierBounds.lowMax; modMax = tierBounds.modMax; }
+            else if (maxScore === 8) { lowMax = 0; modMax = 2; }       // Wells
             else if (maxScore === 9) { lowMax = 0; modMax = 1; }  // CHA₂DS₂-VASc
             else { lowMax = 1; modMax = 3; }                       // Centor
 
@@ -1843,6 +1889,7 @@
                 if (data.category === 'leg_swelling')        renderWellsPartialBreakdown(data.current_data);
                 else if (data.category === 'sore_throat')    renderCentorPartialBreakdown(data.current_data);
                 else if (data.category === 'afib_stroke')    renderChadsvascPartialBreakdown(data.current_data);
+                else if (data.category === 'pneumonia')      renderCurb65PartialBreakdown(data.current_data);
             }
 
             // Show score results when available (during context phase or on completion)
@@ -2076,7 +2123,8 @@
             // Score header with published probability
             html += '<div class="explain-score-header">';
             html += `<div class="score-line">Your score: ${expl.score} (${expl.tier} probability tier, ${expl.score_bracket})</div>`;
-            html += `<div class="prob-line"><strong>What this range means (published data):</strong> ${expl.probability_text} of people in this range were found to have this condition.</div>`;
+            const probContext = expl.probability_context || 'were found to have this condition';
+            html += `<div class="prob-line"><strong>What this range means (published data):</strong> ${expl.probability_text} of people in this range ${probContext}.</div>`;
             html += `<div class="citation-line">Probability estimate source: ${expl.probability_citation}</div>`;
             html += '</div>';
 
@@ -2185,7 +2233,7 @@
 
             document.getElementById('chatMessages').innerHTML = `
                 <div class="msg system">
-                    VeriTriage evaluates leg swelling, sore throat, and stroke risk for atrial fibrillation patients using validated clinical scoring systems. This tool is designed for non-pregnant adults without significant immunocompromise. If you are pregnant, under 18, or immunocompromised, please consult a healthcare provider directly. Choose an assessment below, or describe your symptoms in your own words.
+                    VeriTriage evaluates leg swelling, sore throat, cough and fever (pneumonia risk), and stroke risk for atrial fibrillation patients using validated clinical scoring systems. This tool is designed for non-pregnant adults without significant immunocompromise. If you are pregnant, under 18, or immunocompromised, please consult a healthcare provider directly. Choose an assessment below, or describe your symptoms in your own words.
                 </div>
                 <div class="assessment-options">
                     <div class="assessment-options-label">Choose an Assessment</div>

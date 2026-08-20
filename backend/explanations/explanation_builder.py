@@ -24,6 +24,7 @@ from typing import Optional, Dict, List
 from explanations.probability_mapping import (
     get_wells_probability,
     get_centor_probability,
+    get_curb65_probability,
     UncitedScoreError,
 )
 from explanations.diagram_generator import generate_criterion_diagram
@@ -67,6 +68,15 @@ _CENTOR_BOOL_CRITERIA = [
     ("absence_of_cough", "Absence of cough", "absence_of_cough"),
     ("tender_cervical_nodes", "Tender neck lymph nodes", "tender_cervical_nodes"),
     ("tonsillar_exudate", "Tonsillar exudate/swelling", "tonsillar_exudate"),
+]
+
+# CURB-65 criteria: (param_key, breakdown_label, template_key)
+_CURB65_CRITERIA = [
+    ("confusion", "New confusion", "confusion"),
+    ("urea_elevated", "High urea / BUN", "urea_elevated"),
+    ("rr_high", "Fast breathing", "rr_high"),
+    ("bp_low", "Low blood pressure", "bp_low"),
+    ("age_65_plus", "Age 65 or older", "age_65_plus"),
 ]
 
 
@@ -270,6 +280,75 @@ def _build_centor_explanation(
     }
 
 
+def _build_curb65_explanation(
+    score_result: dict,
+    scoring_variables: dict,
+    templates: dict,
+    source_quotes: Optional[Dict[str, str]] = None,
+) -> Optional[dict]:
+    """Build the explanation dict for CURB-65. Returns None if any needed
+    template slot is empty (no placeholders in production)."""
+    score = score_result["score"]
+    tier = score_result["tier"]
+    breakdown = score_result["breakdown"]
+
+    # Published 30-day mortality (cited-only)
+    try:
+        prob = get_curb65_probability(score)
+    except UncitedScoreError:
+        return None
+
+    criteria_list: List[dict] = []
+    not_contributed: List[str] = []
+
+    for param_key, label, template_key in _CURB65_CRITERIA:
+        present = bool(scoring_variables.get(param_key, False))
+        points = breakdown.get(label, {}).get("points", 0)
+        slot = "present" if present else "absent"
+        sentence = _get_template(templates, "curb65", template_key, slot)
+        if not sentence:
+            return None
+
+        if present:
+            quote = _patient_words(param_key, source_quotes or {})
+            svg = generate_criterion_diagram(
+                patient_words=quote or "Based on your description",
+                criterion_label=label,
+                criterion_matched=True,
+                points_contributed=points,
+                total_score=score,
+                tier=tier,
+            )
+            criteria_list.append({
+                "label": label,
+                "matched": True,
+                "points": points,
+                "patient_words": quote,
+                "explanation": sentence,
+                "svg": svg,
+            })
+        else:
+            not_contributed.append(label)
+
+    return {
+        "available": True,
+        "disclaimer": EXPLANATION_DISCLAIMER,
+        "score": score,
+        "tier": tier,
+        "score_bracket": prob.score_bracket,
+        "probability_text": prob.probability_text,
+        # CURB-65's published number is 30-day MORTALITY, not disease
+        # probability — the frontend must not phrase it as "were found to
+        # have this condition".
+        "probability_context": "died within 30 days in the derivation study (Lim et al., Thorax 2003)",
+        "probability_citation": prob.citation,
+        "scoring_citation": score_result.get("citation", ""),
+        "criteria": criteria_list,
+        "not_contributed": not_contributed,
+        "pending_fields": score_result.get("pendingFields", []),
+    }
+
+
 def build_explanation(
     category: str,
     score_result: dict,
@@ -287,7 +366,7 @@ def build_explanation(
     This is ADDITIVE to the existing doctor_report — it does not modify
     or replace any clinical-grade output.
     """
-    if category not in ("leg_swelling", "sore_throat"):
+    if category not in ("leg_swelling", "sore_throat", "pneumonia"):
         return None
 
     try:
@@ -299,5 +378,7 @@ def build_explanation(
         return _build_wells_explanation(score_result, scoring_variables, templates, source_quotes)
     elif category == "sore_throat":
         return _build_centor_explanation(score_result, scoring_variables, templates, source_quotes)
+    elif category == "pneumonia":
+        return _build_curb65_explanation(score_result, scoring_variables, templates, source_quotes)
 
     return None

@@ -19,6 +19,12 @@
         "status": "approved",
         "notes": "Human-reviewed and approved. 9 of 11 candidates approved as-drafted; age_3_to_14 slot removed entirely rather than written, since tool scope is adults >=18 per centor_score.py docstring and the bracket is never reached in practice. Guard added to _age_modifier_slot() in centor_mockup_demo.py to raise ValueError for age < 18, making the unreachable path fail explicitly rather than silently returning a non-existent key. Closing clauses varied across entries to avoid templated repetition (consistent with Batch 1 approach).",
         "criteria_source": "Centor RM, et al. Med Decis Making. 1981;1(3):239-46; McIsaac WJ, et al. CMAJ. 1998;158(1):75-83."
+      },
+      {
+        "batch": "curb65 (5 criteria, present + absent = 10 sentences)",
+        "status": "DRAFT — pending human review",
+        "notes": "Drafted for the CURB-65 pathway addition. NOT yet human-reviewed. Per this file's rules these sentences should be reviewed line by line before the pathway's explanation layer is treated as production-final. The two 'absent' sentences for urea_elevated and bp_low deliberately note that unmeasured labs/vitals make the score a floor, not a ceiling — that caveat is load-bearing for those two criteria.",
+        "criteria_source": "Lim WS, van der Eerden MM, Laing R, et al. 'Defining community acquired pneumonia severity on presentation to hospital.' Thorax. 2003;58(5):377-382."
       }
     ]
   },
@@ -76,6 +82,28 @@
     "age_modifier": {
       "age_15_to_44": "You reported being between 15 and 44 years old. In this age range, strep throat is common enough that the score doesn't adjust up or down, so your age didn't change your total.",
       "age_45_plus": "You reported being 45 or older. Strep throat becomes less common at this age, which is why the McIsaac modification subtracts a point here — this lowered your score by 1 point."
+    }
+  },
+  "curb65": {
+    "confusion": {
+      "present": "You reported feeling confused or disoriented recently, more than usual. New confusion can be a sign that an infection is affecting the body more seriously, so this counts toward your score.",
+      "absent": "You did not report new confusion or disorientation, so this did not add to your score."
+    },
+    "urea_elevated": {
+      "present": "You reported a blood test showing high urea or BUN levels. Raised urea can indicate the body is under significant strain from an infection, which is why this is included here.",
+      "absent": "You did not report a blood test showing high urea or BUN, so this didn't contribute any points. Note: if you haven't had this blood test recently, this part of the score may be incomplete."
+    },
+    "rr_high": {
+      "present": "You reported breathing faster than 30 breaths per minute, or feeling short of breath. Breathing that fast is one of the signs that a chest infection may be more serious, so this is counted toward your total.",
+      "absent": "You did not report unusually fast breathing, so this didn't factor into your score."
+    },
+    "bp_low": {
+      "present": "You reported that your blood pressure was measured as low recently. Low blood pressure during an infection can mean the body is struggling to cope, which is why this is part of your score.",
+      "absent": "You did not report a low blood pressure reading, so this added nothing to your total. Note: if your blood pressure hasn't been checked recently, this part of the score may be incomplete."
+    },
+    "age_65_plus": {
+      "present": "You reported being 65 or older. Pneumonia tends to be harder on people over 65, so age is counted as one of the factors here.",
+      "absent": "You reported being under 65, so age did not add to your score."
     }
   }
 }

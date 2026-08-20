@@ -32,7 +32,7 @@ from router import (
     get_vague_clarifying_question,
     get_vague_escalation_message,
 )
-from extraction import leg_swelling_extractor, sore_throat_extractor, afib_extractor
+from extraction import leg_swelling_extractor, sore_throat_extractor, afib_extractor, pneumonia_extractor
 from extraction.extraction_utils import detect_category_switch, get_category_switch_message, is_repeat_question
 from extraction.rule_fallback import (
     detect_out_of_scope_mentions,
@@ -41,7 +41,7 @@ from extraction.rule_fallback import (
     get_escalation_options,
 )
 from extraction.extraction_utils import MAX_UNCLEAR_ATTEMPTS, is_clarifying_response
-from scoring import calculate_wells_score, calculate_centor_score, calculate_chadsvasc_score
+from scoring import calculate_wells_score, calculate_centor_score, calculate_chadsvasc_score, calculate_curb65_score
 from population_scope import check_population_scope
 from explanations.explanation_builder import build_explanation
 from emergency_triage import get_emergency_message
@@ -91,6 +91,15 @@ def _score_afib_stroke(data):
         diabetes=data.diabetes,
     )
 
+def _score_pneumonia(data):
+    return calculate_curb65_score(
+        confusion=data.confusion,
+        urea_elevated=data.urea_elevated,
+        rr_high=data.rr_high,
+        bp_low=data.bp_low,
+        age_65_plus=data.age_65_plus,
+    )
+
 CATEGORY_MODULES = {
     "leg_swelling": {
         "extractor": leg_swelling_extractor,
@@ -107,6 +116,11 @@ CATEGORY_MODULES = {
         "data_class": afib_extractor.AFibStrokeData,
         "score_fn": _score_afib_stroke,
     },
+    "pneumonia": {
+        "extractor": pneumonia_extractor,
+        "data_class": pneumonia_extractor.Curb65Data,
+        "score_fn": _score_pneumonia,
+    },
 }
 
 MAX_VAGUE_ROUNDS = 3
@@ -115,6 +129,7 @@ CATEGORY_NAMES = {
     "leg_swelling": "leg swelling (DVT risk)",
     "sore_throat": "sore throat (strep risk)",
     "afib_stroke": "AFib stroke risk",
+    "pneumonia": "pneumonia risk (CURB-65)",
 }
 
 
@@ -491,6 +506,7 @@ async def chat(request: ChatRequest):
                 "leg_swelling": __import__('extraction.rule_fallback', fromlist=['WELLS_QUESTIONS']).WELLS_QUESTIONS,
                 "sore_throat": __import__('extraction.rule_fallback', fromlist=['CENTOR_QUESTIONS']).CENTOR_QUESTIONS,
                 "afib_stroke": __import__('extraction.rule_fallback', fromlist=['CHADSVASC_QUESTIONS']).CHADSVASC_QUESTIONS,
+                "pneumonia": __import__('extraction.rule_fallback', fromlist=['CURB65_QUESTIONS']).CURB65_QUESTIONS,
             }
             q_map = questions_map.get(category, {})
             next_field = missing[0]

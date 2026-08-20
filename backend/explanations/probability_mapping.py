@@ -34,6 +34,11 @@ MCISAAC_2004_JAMA_CITATION = (
     "Empirical validation of guidelines for the management of pharyngitis "
     "in children and adults. JAMA. 2004;291(13):1587-1595."
 )
+LIM_2003_THORAX_CITATION = (
+    "Lim WS, van der Eerden MM, Laing R, et al. Defining community acquired "
+    "pneumonia severity on presentation to hospital: an international "
+    "derivation and validation study. Thorax. 2003;58(5):377-382."
+)
 
 
 @dataclass(frozen=True)
@@ -49,6 +54,18 @@ class ProbabilityResult:
 # Anything outside these is malformed input, not a real score.
 _WELLS_MIN, _WELLS_MAX = 0, 8       # 8 one-point criteria, no negative terms in our partial score
 _CENTOR_MIN, _CENTOR_MAX = -1, 5    # 4 one-point criteria + age modifier (-1/0/+1)
+_CURB65_MIN, _CURB65_MAX = 0, 5     # 5 one-point criteria
+
+# CURB-65 published 30-day mortality per score point (Lim 2003 Thorax,
+# derivation cohort). CURB-65's top tier is called "severe", not "high".
+_CURB65_TABLE = {
+    0: ("score 0", "low", "0.6%"),
+    1: ("score 1", "low", "2.7%"),
+    2: ("score 2", "moderate", "6.8%"),
+    3: ("score 3", "severe", "14.0%"),
+    4: ("score 4", "severe", "27.8%"),
+    5: ("score 5", "severe", "27.8%"),
+}
 
 
 def get_wells_probability(score: int) -> ProbabilityResult:
@@ -147,3 +164,33 @@ def get_centor_probability(score: int) -> ProbabilityResult:
             probability_text="51%-53%",
             citation=MCISAAC_2004_JAMA_CITATION,
         )
+
+
+def get_curb65_probability(score: int) -> ProbabilityResult:
+    """Map a computed CURB-65 score to the published 30-day mortality.
+
+    Source: Lim 2003 Thorax derivation and validation study.
+    Note: this is a MORTALITY figure, not a disease-probability figure —
+    callers must phrase it accordingly (see probability_context in the
+    explanation layer).
+    Raises UncitedScoreError for malformed input.
+    """
+    if not isinstance(score, int) or isinstance(score, bool):
+        raise UncitedScoreError(
+            f"CURB-65 score must be an integer, got {type(score).__name__}: {score!r}. "
+            "No published probability can be cited for this input."
+        )
+    if score < _CURB65_MIN or score > _CURB65_MAX:
+        raise UncitedScoreError(
+            f"CURB-65 score {score} is outside the possible range "
+            f"[{_CURB65_MIN}, {_CURB65_MAX}]. "
+            "No published probability can be cited for this input."
+        )
+
+    bracket, tier, mortality = _CURB65_TABLE[score]
+    return ProbabilityResult(
+        score_bracket=bracket,
+        tier=tier,
+        probability_text=mortality,
+        citation=LIM_2003_THORAX_CITATION,
+    )

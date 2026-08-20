@@ -198,6 +198,11 @@ _CATEGORY_SWITCH_PATTERNS = {
         r"assess my stroke", r"check my stroke", r"chadsvasc",
         r"start (an )?afib", r"switch to afib", r"blood thinner",
     ],
+    "pneumonia": [
+        r"pneumonia", r"chest infection", r"lung infection",
+        r"assess my (cough|pneumonia)", r"check my (cough|pneumonia)",
+        r"start (a )?pneumonia", r"switch to pneumonia", r"curb-?65",
+    ],
 }
 
 
@@ -250,11 +255,13 @@ def get_category_switch_message(requested_category: str, current_category: str) 
         "leg_swelling": "leg swelling",
         "sore_throat": "sore throat",
         "afib_stroke": "AFib stroke risk",
+        "pneumonia": "pneumonia risk",
     }
     requested_names = {
         "leg_swelling": "the leg swelling (DVT risk) assessment",
         "sore_throat": "the sore throat (strep risk) assessment",
         "afib_stroke": "the AFib stroke risk assessment",
+        "pneumonia": "the pneumonia risk (CURB-65) assessment",
     }
     return (f"It sounds like you'd like to switch to {requested_names.get(requested_category, requested_category)}. "
             f"Your {current_names.get(current_category, current_category)} answers so far won't be saved. "
