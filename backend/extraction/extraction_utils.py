@@ -10,7 +10,7 @@ These helpers address critical extraction-loop bugs:
 import re
 import logging
 from typing import Optional, List, Dict, Tuple
-from extraction.rule_fallback import detect_yes_no, _acknowledge_input
+from extraction.rule_fallback import detect_yes_no, _acknowledge_input, DEFINITION_PREFIX
 
 logger = logging.getLogger("veritriage")
 
@@ -53,6 +53,25 @@ def apply_bare_yes_no(current_input: str, current_data, criteria_keys: List[str]
 # so the patient is never trapped in a repeat loop.
 
 MAX_UNCLEAR_ATTEMPTS = 2
+
+
+# Responses that deliberately restate a pending question. These must never be
+# treated as an accidental repeat by either the extractor-level or the
+# top-level circuit breaker — otherwise a legitimate clarification looks like
+# a stuck loop and gets converted into an error.
+CLARIFYING_RESPONSE_MARKERS = (
+    "I'm not sure I understood",
+    f"{DEFINITION_PREFIX}:",
+    "No problem \u2014 let me put that a different way",
+    "No problem \u2014 we'll leave that one as not established",
+)
+
+
+def is_clarifying_response(response: Optional[str]) -> bool:
+    """True if ``response`` intentionally restates a pending question."""
+    if not response:
+        return False
+    return response.lstrip().startswith(CLARIFYING_RESPONSE_MARKERS)
 
 
 def register_unclear_attempt(current_data, field: str) -> int:

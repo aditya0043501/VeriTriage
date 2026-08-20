@@ -16,6 +16,8 @@ from extraction.rule_fallback import (
     WELLS_QUESTIONS,
     WELLS_REPHRASINGS,
     detect_yes_no,
+    detect_definition_request,
+    build_definition_reply,
     _acknowledge_input,
 )
 from extraction.extraction_utils import (
@@ -75,6 +77,14 @@ def extract_and_update_data(
     current_data: LegSwellingData
 ) -> Tuple[str, LegSwellingData, bool]:
     """Process patient input using deterministic extraction."""
+
+    # Definition request ("what is pitting edema?") — answer it, then re-ask
+    # the pending question. Does not consume an escalation attempt.
+    term = detect_definition_request(current_input)
+    if term:
+        pending = WELLS_QUESTIONS.get(current_data.last_asked_field)
+        if pending:
+            return (build_definition_reply(term, pending), current_data, False)
 
     # Age regex fast-path (population scope only)
     if current_data.age is None:

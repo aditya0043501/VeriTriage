@@ -188,6 +188,207 @@ def _is_hedged(text: str) -> bool:
     return False
 
 
+# ---- Definition requests ("what does X mean?") ----
+#
+# "I don't know what atrial fibrillation is" is NOT the same as "I don't know
+# if I have atrial fibrillation". The first is a request for a definition; the
+# second is genuine uncertainty about oneself. Both contain "don't know", so
+# UNCERTAINTY_MARKERS catches them equally and the patient asking what a word
+# means just gets the same question repeated back at them.
+#
+# These patterns require "what"-style framing, so "I don't know IF I have X"
+# still falls through to the hedge path as before.
+
+DEFINITION_PREFIX = "Quick definition"
+
+_DEFINITION_REQUEST_PATTERNS = [
+    r"\bwhat(?:'s|s| is| are| does| do)\b",
+    r"\bwhat do you mean\b",
+    r"\b(?:don'?t|dont|do not) know what\b",
+    r"\b(?:never|not) heard of\b",
+    r"\bno idea what\b",
+    r"\bdefine\b",
+    r"\bmeaning of\b",
+    r"\bmean(?:s|ing)?\?",
+    r"\bexplain\b",
+    r"\bconfused (?:about|by)\b",
+]
+
+# Plain-language definitions for the medical terms used in WELLS_QUESTIONS,
+# CENTOR_QUESTIONS, CHADSVASC_QUESTIONS and their rephrasings/labels.
+# Static and hand-written, like every other patient-facing string here.
+# Each is descriptive only — it defines a term, it does not tell the patient
+# whether they have the thing.
+TERM_DEFINITIONS = {
+    "atrial_fibrillation": (
+        "Atrial fibrillation — often shortened to AFib — is a heart rhythm that is "
+        "irregular, and often faster than normal. People sometimes notice it as a "
+        "fluttering or racing heartbeat, but many people feel nothing at all. It is "
+        "diagnosed by a doctor using a heart tracing called an ECG or EKG."
+    ),
+    "tia": (
+        "A TIA, or transient ischaemic attack, is often called a mini-stroke. It is "
+        "when the blood supply to part of the brain is briefly interrupted, causing "
+        "stroke-like symptoms — such as weakness, numbness, or trouble speaking — "
+        "that go away again, usually within minutes to a day."
+    ),
+    "stroke": (
+        "A stroke happens when the blood supply to part of the brain is cut off, "
+        "which can cause lasting effects such as weakness or numbness on one side, "
+        "or difficulty speaking. It is diagnosed and treated in hospital."
+    ),
+    "heart_failure": (
+        "Heart failure — sometimes called congestive heart failure or CHF — means the "
+        "heart isn't pumping as strongly as it should. It often causes breathlessness, "
+        "tiredness, and swelling in the legs or ankles. It is diagnosed by a doctor."
+    ),
+    "hypertension": (
+        "Hypertension is the medical word for high blood pressure — blood pushing "
+        "against the walls of your arteries harder than it should. It usually causes "
+        "no symptoms, so it is normally found by having your blood pressure measured."
+    ),
+    "vascular_disease": (
+        "Vascular disease means a problem with the arteries that carry blood around "
+        "your body — for example a previous heart attack, a stent or bypass operation, "
+        "or narrowed arteries in the legs."
+    ),
+    "diabetes": (
+        "Diabetes is a condition where the level of sugar (glucose) in the blood is "
+        "too high. It is usually managed with diet, tablets such as metformin, or "
+        "insulin, and is diagnosed by a doctor with a blood test."
+    ),
+    "dvt": (
+        "A DVT, or deep vein thrombosis, is a blood clot that forms in one of the deep "
+        "veins, usually in the leg. It can cause swelling, pain, and warmth in that leg."
+    ),
+    "pitting_edema": (
+        "Pitting edema is swelling that holds the shape of your finger for a moment "
+        "after you press on it — you press, lift your finger, and a small dent stays "
+        "behind before slowly filling back in."
+    ),
+    "collateral_veins": (
+        "Collateral veins are small veins near the surface of the skin that become more "
+        "visible when a deeper vein is blocked and blood is rerouted through them. They "
+        "look like new veins that weren't there before, and are not the same as varicose "
+        "veins."
+    ),
+    "paralysis": (
+        "Paralysis means being unable to move a part of the body. A milder version, "
+        "sometimes called paresis, means the limb is weak but can still move a little."
+    ),
+    "immobilization": (
+        "Immobilization means a limb has been kept still — for example in a plaster "
+        "cast, a splint, or a rigid brace — so it couldn't move normally."
+    ),
+    "bedridden": (
+        "Bedridden means having to stay in bed more or less continuously, rather than "
+        "getting up and moving around as usual."
+    ),
+    "tonsils": (
+        "Your tonsils are the two soft lumps of tissue at the back of your throat, one "
+        "on each side. You can usually see them with a mirror and a light if you open "
+        "your mouth wide."
+    ),
+    "exudate": (
+        "Exudate is the white or yellowish coating or patches that can appear on the "
+        "tonsils during some throat infections."
+    ),
+    "lymph_nodes": (
+        "Lymph nodes — sometimes called glands — are small lumps that are part of your "
+        "immune system. The ones in the front of your neck, under the jaw, can become "
+        "swollen and tender during a throat infection."
+    ),
+    "strep_throat": (
+        "Strep throat is a sore throat caused by a bacterium called group A "
+        "streptococcus, rather than by a virus. It is confirmed with a throat swab."
+    ),
+    "d_dimer": (
+        "A D-dimer is a blood test that looks for fragments left behind when a blood "
+        "clot breaks down. It is ordered and interpreted by a clinician."
+    ),
+}
+
+# Term fragments mapped to definition keys. Ordered longest-first at match
+# time so "atrial fibrillation" wins over "fibrillation", and common
+# misspellings of the long terms are covered by matching a distinctive stem
+# ("fibrillation" catches "artrial fibrillation").
+_TERM_FRAGMENTS = {
+    "atrial fibrillation": "atrial_fibrillation",
+    "fibrillation": "atrial_fibrillation",
+    "atrial fib": "atrial_fibrillation",
+    "afib": "atrial_fibrillation",
+    "a-fib": "atrial_fibrillation",
+    "a fib": "atrial_fibrillation",
+    "transient ischemic": "tia",
+    "transient ischaemic": "tia",
+    "mini-stroke": "tia",
+    "mini stroke": "tia",
+    "tia": "tia",
+    "stroke": "stroke",
+    "congestive heart failure": "heart_failure",
+    "heart failure": "heart_failure",
+    "chf": "heart_failure",
+    "hypertension": "hypertension",
+    "high blood pressure": "hypertension",
+    "peripheral artery disease": "vascular_disease",
+    "vascular disease": "vascular_disease",
+    "vascular": "vascular_disease",
+    "diabetes": "diabetes",
+    "diabetic": "diabetes",
+    "deep vein thrombosis": "dvt",
+    "dvt": "dvt",
+    "pitting edema": "pitting_edema",
+    "pitting oedema": "pitting_edema",
+    "pitting": "pitting_edema",
+    "edema": "pitting_edema",
+    "oedema": "pitting_edema",
+    "collateral vein": "collateral_veins",
+    "collateral": "collateral_veins",
+    "paralysis": "paralysis",
+    "paresis": "paralysis",
+    "immobilization": "immobilization",
+    "immobilisation": "immobilization",
+    "splint": "immobilization",
+    "bedridden": "bedridden",
+    "bed ridden": "bedridden",
+    "tonsillar": "tonsils",
+    "tonsils": "tonsils",
+    "tonsil": "tonsils",
+    "exudate": "exudate",
+    "lymph nodes": "lymph_nodes",
+    "lymph node": "lymph_nodes",
+    "cervical nodes": "lymph_nodes",
+    "adenopathy": "lymph_nodes",
+    "strep throat": "strep_throat",
+    "streptococcal": "strep_throat",
+    "strep": "strep_throat",
+    "d-dimer": "d_dimer",
+    "d dimer": "d_dimer",
+}
+
+
+def detect_definition_request(text: str) -> Optional[str]:
+    """Return a definition-key if ``text`` is asking what a medical term means.
+
+    Returns None for genuine self-uncertainty ("I don't know if I have X"),
+    which must keep flowing to the existing hedge path.
+    """
+    t = text.lower().strip()
+    if not any(re.search(p, t) for p in _DEFINITION_REQUEST_PATTERNS):
+        return None
+    # Longest fragment first so specific terms beat their own substrings.
+    for fragment in sorted(_TERM_FRAGMENTS, key=len, reverse=True):
+        if re.search(rf"\b{re.escape(fragment)}\b", t):
+            return _TERM_FRAGMENTS[fragment]
+    return None
+
+
+def build_definition_reply(term_key: str, question: str) -> str:
+    """Answer the definition request, then re-ask the pending question."""
+    definition = TERM_DEFINITIONS[term_key]
+    return f"{DEFINITION_PREFIX}: {definition}\n\nWith that in mind — {question}"
+
+
 # ---- Family-history exclusion ----
 #
 # CHA₂DS₂-VASc (and most clinical scores) score PERSONAL history, not family
@@ -442,6 +643,42 @@ WELLS_REPHRASINGS = {
     "collateral_veins": "Another way to put it: looking at the skin of that leg, do you see any veins near the surface that are new — ones you don't remember being there before?",
 }
 
+# Concrete tappable answer options, offered ONLY alongside the rephrased
+# question (escalation attempt 2) — never on the first ask, where free text
+# stays the default. Hand-written per field, same principle as
+# WELLS_REPHRASINGS.
+#
+# IMPORTANT: a tapped chip is submitted as ordinary text and travels the
+# normal _resolve_yes_no() path, exactly like a typed answer. Each label is
+# therefore worded so the existing YES_PATTERNS / NO_PATTERNS tables resolve
+# it correctly — there is deliberately no separate chip-handling branch.
+# test_option_chips.py asserts every label round-trips to the intended value.
+WELLS_OPTIONS = {
+    "active_cancer": ["Yes, in the last 6 months", "No, never", "Not sure"],
+    "paralysis_or_immobilization": ["Yes, I have a cast or brace", "No, I can move normally", "Not sure"],
+    "bedridden_or_surgery": ["Yes, surgery or long bed rest", "No, neither of those", "Not sure"],
+    "localized_tenderness": ["Yes, it hurts to press", "No, it doesn't hurt", "Not sure"],
+    "entire_leg_swollen": ["The whole leg", "Just the calf or ankle", "Not sure"],
+    "calf_swelling_over_3cm": ["Yes, clearly bigger", "No, about the same size", "Not sure"],
+    "pitting_edema": ["Yes, it leaves a dent", "No, it springs back", "Not sure"],
+    "collateral_veins": ["Yes, there are new veins", "No, nothing new", "Not sure"],
+}
+
+# Human-readable display names, used when a field has to be named in
+# patient- or doctor-facing output (e.g. criteria left unresolved after
+# repeated "not sure" answers). Static lookup table, same pattern as
+# WELLS_QUESTIONS — never generated.
+WELLS_FIELD_LABELS = {
+    "active_cancer": "Active cancer or recent cancer treatment",
+    "paralysis_or_immobilization": "Paralysis or leg immobilization",
+    "bedridden_or_surgery": "Recent bed rest or major surgery",
+    "localized_tenderness": "Tenderness along the deep leg veins",
+    "entire_leg_swollen": "Swelling of the entire leg",
+    "calf_swelling_over_3cm": "Calf more than 3 cm larger than the other side",
+    "pitting_edema": "Pitting edema in the affected leg",
+    "collateral_veins": "New surface (collateral) veins",
+}
+
 
 def extract_wells_fields(combined: str, current_input: str, missing: List[str], last_asked_field: Optional[str] = None) -> Tuple[Dict, List[str]]:
     """Return (extracted_values, unclear_fields).
@@ -536,6 +773,30 @@ CENTOR_REPHRASINGS = {
     "absence_of_cough": "Let me ask that more simply: have you been coughing at all over the last day or two?",
     "tender_cervical_nodes": "To be more specific: press gently along the front of your neck, just under your jawline. Do you feel any lumps there, or is it sore to press?",
     "tonsillar_exudate": "Another way to ask: with a light and a mirror, look at the back of your throat. Do your tonsils have white or yellow spots on them, or look puffy?",
+}
+
+# Escalation-only answer options (see WELLS_OPTIONS). `age` is intentionally
+# absent: it is a free numeric value, so a short option list would either
+# be wrong or force the patient into a bucket.
+#
+# absence_of_cough is inverted-polarity — the rephrased question asks whether
+# the patient IS coughing, so "Yes, I have a cough" must resolve the
+# criterion (absence of cough) to False. The labels are worded to hit the
+# inverted-field branch of _resolve_yes_no() correctly.
+CENTOR_OPTIONS = {
+    "fever": ["Yes, felt hot or feverish", "No fever", "Not sure"],
+    "absence_of_cough": ["Yes, I have a cough", "No, I'm not coughing", "Not sure"],
+    "tender_cervical_nodes": ["Yes, tender lumps there", "No lumps I can feel", "Not sure"],
+    "tonsillar_exudate": ["Yes, white patches", "No, they look normal", "Not sure / can't tell"],
+}
+
+# Human-readable display names (see WELLS_FIELD_LABELS).
+CENTOR_FIELD_LABELS = {
+    "age": "Age",
+    "fever": "Fever",
+    "absence_of_cough": "Absence of a cough",
+    "tender_cervical_nodes": "Tender or swollen lymph nodes at the front of the neck",
+    "tonsillar_exudate": "White patches or swelling on the tonsils",
 }
 
 
@@ -656,6 +917,28 @@ CHADSVASC_REPHRASINGS = {
     "stroke_tia_history": "Let me break that up and ask just the first part: have you ever had a stroke, or a 'mini-stroke' — also called a TIA?",
     "vascular_disease": "Let me simplify: have you ever had a heart attack, a stent or bypass surgery, or been told you have blocked arteries in your legs?",
     "diabetes": "Another way to ask: has a doctor ever told you that you have diabetes, or put you on insulin or metformin?",
+}
+
+# Escalation-only answer options (see WELLS_OPTIONS). `age` is omitted for
+# the same reason as in CENTOR_OPTIONS (free numeric value).
+CHADSVASC_OPTIONS = {
+    "sex": ["Male", "Female"],
+    "chf_history": ["Yes, diagnosed with heart failure", "No, never diagnosed", "Not sure"],
+    "hypertension": ["Yes, or I take BP medication", "No, my BP is fine", "Not sure"],
+    "stroke_tia_history": ["Yes, a stroke or TIA", "No, neither", "Not sure"],
+    "vascular_disease": ["Yes, heart attack or stent", "No, none of those", "Not sure"],
+    "diabetes": ["Yes, I have diabetes", "No, not diabetic", "Not sure"],
+}
+
+# Human-readable display names (see WELLS_FIELD_LABELS).
+CHADSVASC_FIELD_LABELS = {
+    "age": "Age",
+    "sex": "Sex",
+    "chf_history": "History of heart failure",
+    "hypertension": "High blood pressure",
+    "stroke_tia_history": "Prior stroke or mini-stroke",
+    "vascular_disease": "Vascular disease such as heart attack, blocked arteries, stent, or bypass",
+    "diabetes": "Diabetes",
 }
 
 
@@ -855,6 +1138,50 @@ def detect_out_of_scope_mentions(text: str, category: str) -> List[str]:
             found.append(clause)
 
     return found
+
+
+_CATEGORY_FIELD_LABELS = {
+    "leg_swelling": WELLS_FIELD_LABELS,
+    "sore_throat": CENTOR_FIELD_LABELS,
+    "afib_stroke": CHADSVASC_FIELD_LABELS,
+}
+
+_CATEGORY_OPTIONS = {
+    "leg_swelling": WELLS_OPTIONS,
+    "sore_throat": CENTOR_OPTIONS,
+    "afib_stroke": CHADSVASC_OPTIONS,
+}
+
+
+def get_escalation_options(category: str, field: str) -> Optional[List[str]]:
+    """Concrete answer options for a field, for use with the rephrased
+    question only.
+
+    Returns None when the field has no option list (e.g. `age`, a free
+    numeric value), so the caller falls back to its normal chip behaviour.
+    """
+    options = _CATEGORY_OPTIONS.get(category, {}).get(field)
+    return list(options) if options else None
+
+
+def format_unresolved_fields(fields: List[str], category: str) -> List[str]:
+    """Turn raw field keys into readable display strings.
+
+    Each label is suffixed with "(not established)" so the reader can see
+    at a glance that the criterion was never answered — as opposed to
+    having been answered "no", which is how a bare criterion name would
+    otherwise read.
+
+    Unknown keys fall back to a de-underscored version of the key rather
+    than being dropped, so a field can never silently vanish from the
+    report just because someone forgot to add a label.
+    """
+    labels = _CATEGORY_FIELD_LABELS.get(category, {})
+    out: List[str] = []
+    for field in fields:
+        label = labels.get(field) or field.replace("_", " ").capitalize()
+        out.append(f"{label} (not established)")
+    return out
 
 
 def format_out_of_scope_notes(mentions: List[str], category: str) -> Optional[str]:

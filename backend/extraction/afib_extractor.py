@@ -20,6 +20,8 @@ from extraction.rule_fallback import (
     CHADSVASC_QUESTIONS,
     CHADSVASC_REPHRASINGS,
     detect_yes_no,
+    detect_definition_request,
+    build_definition_reply,
     _acknowledge_input,
 )
 from extraction.extraction_utils import (
@@ -37,6 +39,30 @@ CRITERIA_KEYS = [
     "chf_history", "hypertension", "stroke_tia_history",
     "vascular_disease", "diabetes",
 ]
+
+# The question the AFib gate asks before anything else is collected.
+AFIB_GATE_QUESTION = "Have you been diagnosed with atrial fibrillation by a doctor?"
+
+# Escalation attempt 2: a deliberately plainer, more direct phrasing, in case
+# the clinical term itself is what's causing the uncertainty.
+AFIB_DIRECT_QUESTION = (
+    "Let me ask it as plainly as I can: has a doctor ever told you that you have an "
+    "irregular heart rhythm called atrial fibrillation, or AFib? (Yes / No / Not sure)"
+)
+
+# Escalation attempt 3: stop. CHA₂DS₂-VASc is only meaningful for people with
+# diagnosed atrial fibrillation, so guessing either way would produce a
+# misleading score. End this assessment clearly rather than erroring out.
+AFIB_CANNOT_PROCEED_MESSAGE = (
+    "That's completely fine \u2014 it's not something everyone would know offhand. "
+    "This particular assessment only produces a meaningful result for people who "
+    "have been diagnosed with atrial fibrillation, so I shouldn't guess either way "
+    "and won't calculate a score from an assumption. Your doctor or a copy of your "
+    "medical records can confirm whether you have that diagnosis, and you're welcome "
+    "to come back once you know. Nothing you've told me has been lost. In the "
+    "meantime, you can start a new assessment for leg swelling or a sore throat if "
+    "either of those is a concern."
+)
 
 
 class AFibStrokeData(BaseModel):
@@ -95,6 +121,17 @@ def extract_and_update_data(
 ) -> Tuple[str, AFibStrokeData, bool]:
     """Process patient input using deterministic extraction."""
 
+    # Definition request ("what is atrial fibrillation?") — answer the
+    # question the patient actually asked, then re-ask ours. Deliberately
+    # before the AFib gate and before any hedge handling, and it neither
+    # consumes an escalation attempt nor alters collected data.
+    term = detect_definition_request(current_input)
+    if term:
+        pending = (AFIB_GATE_QUESTION if current_data.afib_confirmed is None
+                   else CHADSVASC_QUESTIONS.get(current_data.last_asked_field))
+        if pending:
+            return (build_definition_reply(term, pending), current_data, False)
+
     # Age regex fast-path
     if current_data.age is None:
         age_match = re.search(r'\b(\d{1,3})\s*(years? old|years?|yrs?|y/o)\b', current_input)
@@ -129,10 +166,24 @@ def extract_and_update_data(
                     "You can also start a new assessment for leg swelling or sore throat if those are your concern.",
                     current_data, True)
         else:
-            ack = _acknowledge_input(current_input)
+            # afib_confirmed has no safe default (unlike the scored criteria,
+            # which can be treated as no-contribution), so it can never be
+            # marked unresolved and skipped. But it must also never repeat
+            # itself verbatim: doing so tripped the top-level circuit breaker,
+            # which then surfaced "Something went wrong... let's restart" and
+            # ended the session. Escalate deterministically instead:
+            #   attempt 1 -> standard re-ask
+            #   attempt 2 -> a more direct, plainer-worded question
+            #   attempt 3 -> stop, explain why, and keep what we already have
             current_data.last_asked_field = "afib_confirmed"
-            return (f"{ack}To use this assessment, I need to know: have you been diagnosed with atrial "
-                    "fibrillation by a doctor? (Yes / No / Not sure)", current_data, False)
+            attempts = register_unclear_attempt(current_data, "afib_confirmed")
+            if attempts == 1:
+                ack = _acknowledge_input(current_input)
+                return (f"{ack}To use this assessment, I need to know: have you been diagnosed with atrial "
+                        "fibrillation by a doctor? (Yes / No / Not sure)", current_data, False)
+            if attempts == 2:
+                return (AFIB_DIRECT_QUESTION, current_data, False)
+            return (AFIB_CANNOT_PROCEED_MESSAGE, current_data, True)
 
     if current_data.afib_confirmed is False:
         return ("This evaluation is for patients with confirmed atrial fibrillation. "

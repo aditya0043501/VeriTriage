@@ -34,7 +34,13 @@ from router import (
 )
 from extraction import leg_swelling_extractor, sore_throat_extractor, afib_extractor
 from extraction.extraction_utils import detect_category_switch, get_category_switch_message, is_repeat_question
-from extraction.rule_fallback import detect_out_of_scope_mentions, format_out_of_scope_notes
+from extraction.rule_fallback import (
+    detect_out_of_scope_mentions,
+    format_out_of_scope_notes,
+    format_unresolved_fields,
+    get_escalation_options,
+)
+from extraction.extraction_utils import MAX_UNCLEAR_ATTEMPTS, is_clarifying_response
 from scoring import calculate_wells_score, calculate_centor_score, calculate_chadsvasc_score
 from population_scope import check_population_scope
 from explanations.explanation_builder import build_explanation
@@ -133,6 +139,17 @@ def _get_chips(phase: str, current_data: Optional[Dict] = None, category: Option
         return None
     if phase == "extraction" and current_data:
         last_field = current_data.get("last_asked_field")
+        # Escalation chips: the patient gave one unclear answer and has just
+        # been sent the rephrased question, so offer concrete options instead
+        # of relying on free text alone. Derived from existing state
+        # (unclear_counts) rather than a separate signalling channel — the
+        # first ask never reaches this branch, so free text stays the default.
+        if last_field and current_data.get(last_field) is None:
+            counts = current_data.get("unclear_counts") or {}
+            if counts.get(last_field) == MAX_UNCLEAR_ATTEMPTS - 1:
+                escalation = get_escalation_options(category, last_field)
+                if escalation:
+                    return escalation
         if last_field == "sex":
             return CHIP_OPTIONS["sex"]
         if last_field == "age":
@@ -212,8 +229,10 @@ def _build_doctor_report(category, conv_state, score_result, patient_context):
 
     # Criteria we stopped asking about after repeated "not sure" answers.
     # Scored as no-contribution, but reported as never established rather
-    # than silently presented as a "no".
+    # than silently presented as a "no". Raw keys are kept for programmatic
+    # use; the *_display list carries the readable labels for rendering.
     unresolved_fields = list(current_data.get("unresolved_fields") or [])
+    unresolved_fields_display = format_unresolved_fields(unresolved_fields, category)
 
     return {
         "chief_complaint": chief_complaint,
@@ -235,6 +254,7 @@ def _build_doctor_report(category, conv_state, score_result, patient_context):
         "explanation": explanation,
         "out_of_scope_notes": out_of_scope_notes,
         "unresolved_fields": unresolved_fields,
+        "unresolved_fields_display": unresolved_fields_display,
     }
 
 
@@ -443,7 +463,7 @@ async def chat(request: ChatRequest):
     # the last bot message, something went wrong. Force a state check and
     # surface an error rather than looping indefinitely. Skip intentional
     # clarifying re-prompts that embed the original question.
-    is_clarifying = response and response.startswith("I'm not sure I understood")
+    is_clarifying = is_clarifying_response(response)
     if response and not is_clarifying and is_repeat_question(response, conv_state["conversation_history"][:-1]):
         # Try to recover by asking about the next missing field deterministically
         missing = updated_data.get_missing_fields() if hasattr(updated_data, "get_missing_fields") else []

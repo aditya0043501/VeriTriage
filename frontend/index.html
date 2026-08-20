@@ -692,15 +692,20 @@
         }
         .explain-toggle.expanded .toggle-icon { transform: rotate(90deg); }
 
+        /* Visibility is toggled on the container, which is what
+           toggleExplanation() adds .visible to. Putting display:none on
+           .explain-layer instead would leave the content permanently
+           hidden, since the inner element never receives the class. */
+        #explainLayerContainer { display: none; }
+        #explainLayerContainer.visible { display: block; }
+
         .explain-layer {
-            display: none;
             background: var(--slate-surface);
             border: 1px solid var(--border-strong);
             border-radius: 4px;
             padding: 22px;
             margin-top: 14px;
         }
-        .explain-layer.visible { display: block; }
 
         .explain-disclaimer {
             background: rgba(200, 146, 74, 0.08);
@@ -925,6 +930,38 @@
             margin-top: 6px;
         }
 
+        /* Criteria never established (repeated "not sure" answers) */
+        .report-unresolved {
+            background: rgba(200, 146, 74, 0.06);
+            border-left: 2px solid var(--amber);
+            padding: 10px 12px;
+            border-radius: 0 3px 3px 0;
+        }
+        .report-unresolved ul { list-style: none; padding: 0; margin: 6px 0 0; }
+        .report-unresolved li {
+            font-size: 12.5px;
+            color: var(--bone);
+            padding: 3px 0 3px 14px;
+            position: relative;
+            line-height: 1.5;
+        }
+        .report-unresolved li::before {
+            content: '\2013';
+            position: absolute; left: 2px;
+            color: var(--amber);
+        }
+
+        /* Symptoms mentioned that this instrument does not screen for */
+        .report-out-of-scope {
+            font-size: 12.5px;
+            color: var(--bone);
+            line-height: 1.55;
+            padding: 10px 12px;
+            background: var(--ink-teal);
+            border-left: 2px solid var(--aqua);
+            border-radius: 0 3px 3px 0;
+        }
+
         .report-disclaimer {
             background: rgba(200, 146, 74, 0.08);
             border: 1px solid var(--amber);
@@ -1106,6 +1143,10 @@
             cursor: pointer;
             transition: all 150ms ease;
             user-select: none;
+            /* Escalation chips carry full answer phrases, not just Yes/No,
+               so they must wrap instead of overflowing the pill. */
+            white-space: normal;
+            max-width: 100%;
         }
         .chip:hover {
             border-color: var(--aqua);
@@ -1313,7 +1354,7 @@
                 <div class="how-it-works" id="howItWorks">
                     <div class="hiw-header" onclick="toggleHowItWorks()">
                         <span class="hiw-title">How This Works</span>
-                        <span class="hiw-toggle">&#rsaquo;</span>
+                        <span class="hiw-toggle">&rsaquo;</span>
                     </div>
                     <div class="hiw-body">
                         <div class="hiw-section">
@@ -1879,6 +1920,33 @@
                 breakdownHTML += `<div class="breakdown-row"><span class="label">${key}</span><span class="value">${pts}</span></div>`;
             }
 
+            // Criteria the patient could not answer, after repeated "not sure".
+            // Shown so they don't read as if the patient answered "no".
+            let unresolvedHTML = '';
+            const unresolved = report.unresolved_fields_display || [];
+            if (unresolved.length) {
+                unresolvedHTML = `
+                <div class="report-section">
+                    <div class="report-sublabel">Not Established</div>
+                    <div class="report-unresolved">
+                        These criteria could not be confirmed from the patient's answers.
+                        They contributed no points, and were not answered "no".
+                        <ul>${unresolved.map(u => `<li>${u}</li>`).join('')}</ul>
+                    </div>
+                </div>`;
+            }
+
+            // Symptoms raised that this instrument does not screen for.
+            // Verbatim only — no interpretation.
+            let outOfScopeHTML = '';
+            if (report.out_of_scope_notes) {
+                outOfScopeHTML = `
+                <div class="report-section">
+                    <div class="report-sublabel">Not Screened For</div>
+                    <div class="report-out-of-scope">${report.out_of_scope_notes}</div>
+                </div>`;
+            }
+
             reportEl.innerHTML = `
                 <div class="panel-label" style="margin-bottom:10px;">Doctor-Facing Summary</div>
                 <div class="report-section">
@@ -1894,11 +1962,13 @@
                     ${breakdownHTML}
                     ${report.pending_fields.length ? `<div class="report-pending">Pending clinical evaluation: ${report.pending_fields.join(', ')}</div>` : ''}
                 </div>
+                ${unresolvedHTML}
                 <div class="report-section">
                     <div class="report-sublabel">Patient-Reported Context</div>
                     <div class="report-context-note">As reported by patient, not clinically verified:</div>
                     <div class="report-context-text">${report.patient_reported_context}</div>
                 </div>
+                ${outOfScopeHTML}
                 <div class="report-section">
                     <div class="report-sublabel">Scoring Instrument</div>
                     <div class="report-citation">${report.scoring_instrument}</div>
@@ -1935,7 +2005,7 @@
             const btn = document.createElement('button');
             btn.className = 'explain-toggle';
             btn.id = 'explainToggleBtn';
-            btn.innerHTML = '<span class="toggle-icon">&#rsaquo;</span> Show me why';
+            btn.innerHTML = '<span class="toggle-icon">&rsaquo;</span> Show me why';
             btn.onclick = toggleExplanation;
             toggleContainer.appendChild(btn);
         }
@@ -1948,12 +2018,12 @@
             if (layer.classList.contains('visible')) {
                 layer.classList.remove('visible');
                 btn.classList.remove('expanded');
-                btn.innerHTML = '<span class="toggle-icon">&#rsaquo;</span> Show me why';
+                btn.innerHTML = '<span class="toggle-icon">&rsaquo;</span> Show me why';
             } else {
                 layer.innerHTML = buildExplanationHTML(_cachedExplanation);
                 layer.classList.add('visible');
                 btn.classList.add('expanded');
-                btn.innerHTML = '<span class="toggle-icon">&#rsaquo;</span> Hide explanation';
+                btn.innerHTML = '<span class="toggle-icon">&rsaquo;</span> Hide explanation';
             }
         }
 

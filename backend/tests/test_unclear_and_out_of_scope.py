@@ -29,8 +29,12 @@ from extraction.rule_fallback import (  # noqa: E402
     CENTOR_REPHRASINGS,
     CHADSVASC_QUESTIONS,
     CHADSVASC_REPHRASINGS,
+    WELLS_FIELD_LABELS,
+    CENTOR_FIELD_LABELS,
+    CHADSVASC_FIELD_LABELS,
     detect_out_of_scope_mentions,
     format_out_of_scope_notes,
+    format_unresolved_fields,
     extract_wells_fields,
 )
 from extraction.extraction_utils import MAX_UNCLEAR_ATTEMPTS  # noqa: E402
@@ -146,6 +150,77 @@ class TestRephrasingTablesAreComplete(unittest.TestCase):
 
     def test_chadsvasc(self):
         self._check(CHADSVASC_QUESTIONS, CHADSVASC_REPHRASINGS, "chadsvasc")
+
+
+class TestUnresolvedFieldLabels(unittest.TestCase):
+    """Unresolved criteria must be reported with readable labels, and must
+    read as 'never answered' rather than as a patient 'no'."""
+
+    def test_raw_key_is_replaced_with_a_readable_label(self):
+        got = format_unresolved_fields(["paralysis_or_immobilization"], "leg_swelling")
+        self.assertEqual(got, ["Paralysis or leg immobilization (not established)"])
+        self.assertNotIn("paralysis_or_immobilization", got[0])
+
+    def test_label_states_not_established(self):
+        """The suffix is the point: a bare criterion name reads like a 'no'."""
+        for field in WELLS_FIELD_LABELS:
+            with self.subTest(field=field):
+                got = format_unresolved_fields([field], "leg_swelling")[0]
+                self.assertTrue(got.endswith("(not established)"))
+
+    def test_no_underscores_survive_into_display_output(self):
+        got = format_unresolved_fields(list(WELLS_FIELD_LABELS), "leg_swelling")
+        for label in got:
+            with self.subTest(label=label):
+                self.assertNotIn("_", label)
+
+    def test_order_and_count_are_preserved(self):
+        fields = ["active_cancer", "pitting_edema", "collateral_veins"]
+        got = format_unresolved_fields(fields, "leg_swelling")
+        self.assertEqual(len(got), 3)
+        self.assertTrue(got[0].startswith("Active cancer"))
+        self.assertTrue(got[1].startswith("Pitting edema"))
+        self.assertTrue(got[2].startswith("New surface"))
+
+    def test_empty_input_gives_empty_output(self):
+        self.assertEqual(format_unresolved_fields([], "leg_swelling"), [])
+
+    def test_unknown_field_falls_back_rather_than_disappearing(self):
+        """A missing label must never silently drop a field from the report."""
+        got = format_unresolved_fields(["some_new_field"], "leg_swelling")
+        self.assertEqual(got, ["Some new field (not established)"])
+
+    def test_works_for_all_three_instruments(self):
+        cases = [
+            ("sore_throat", "tender_cervical_nodes"),
+            ("afib_stroke", "stroke_tia_history"),
+            ("leg_swelling", "bedridden_or_surgery"),
+        ]
+        for category, field in cases:
+            with self.subTest(category=category):
+                got = format_unresolved_fields([field], category)[0]
+                self.assertNotIn("_", got)
+                self.assertTrue(got.endswith("(not established)"))
+
+
+class TestFieldLabelTablesAreComplete(unittest.TestCase):
+    """Every question a patient can be asked must have a display label."""
+
+    def _check(self, questions, labels, name):
+        for field in questions:
+            with self.subTest(table=name, field=field):
+                self.assertIn(field, labels)
+                self.assertTrue(labels[field].strip())
+                self.assertNotIn("_", labels[field])
+
+    def test_wells(self):
+        self._check(WELLS_QUESTIONS, WELLS_FIELD_LABELS, "wells")
+
+    def test_centor(self):
+        self._check(CENTOR_QUESTIONS, CENTOR_FIELD_LABELS, "centor")
+
+    def test_chadsvasc(self):
+        self._check(CHADSVASC_QUESTIONS, CHADSVASC_FIELD_LABELS, "chadsvasc")
 
 
 # ---------------------------------------------------------------------------
