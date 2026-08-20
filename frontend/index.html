@@ -440,6 +440,16 @@
             animation: value-settle 240ms cubic-bezier(0.2, 0.7, 0.2, 1);
         }
 
+        /* A criterion the patient could not confirm after repeated unclear
+           answers is not a "No" — it was never established. Amber + italic,
+           with a hover tooltip explaining the distinction. */
+        .channel-value.unresolved {
+            color: #f59e0b;
+            font-style: italic;
+            animation: none;
+            cursor: help;
+        }
+
         /* The settle: opacity 0→1 + 3px rightward shift easing back to 0.
            Like a needle settling. No bounce, no pulse, no glow. */
         @keyframes value-settle {
@@ -1640,15 +1650,24 @@
             const labels = VARIABLE_LABELS[category];
             if (!labels) { container.innerHTML = ''; return; }
 
+            // Fields the patient could not confirm after repeated unclear
+            // answers. These must NOT render as "No" — that would contradict
+            // the doctor report, which lists them as not established.
+            const unresolved = currentData.unresolved_fields || [];
+
             let html = '';
             for (const [key, cfg] of Object.entries(labels)) {
                 const value = currentData[key];
-                const captured = value !== null && value !== undefined;
+                const isUnresolved = unresolved.includes(key);
+                const captured = isUnresolved || (value !== null && value !== undefined);
+                const valueHTML = isUnresolved
+                    ? `<span class="channel-value unresolved" title="Could not be confirmed from the patient's answers.">Not established</span>`
+                    : `<span class="channel-value">${captured ? cfg.format(value) : '&mdash;'}</span>`;
                 html += `
                     <div class="readout-channel ${captured ? 'captured' : ''}" data-key="${key}">
                         <span class="channel-led"></span>
                         <span class="channel-label">${cfg.label}</span>
-                        <span class="channel-value">${captured ? cfg.format(value) : '&mdash;'}</span>
+                        ${valueHTML}
                     </div>
                 `;
             }
